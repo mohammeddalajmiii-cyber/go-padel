@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/* Go Padel colors: court-blue turf, padel-ball yellow, floodlit white, navy ink */
+@theme {
+  --color-court: #1d4bb8;
+  --color-court-deep: #11307c;
+  --color-court-line: #f3f6ff;
+  --color-ball: #dcf245;
+  --color-ball-deep: #c3dc1f;
+  --color-ink: #142347;
+  --color-muted: #5a6789;
+  --color-paper: #f4f6fb;
+  --color-line: #d6dcea;
+  --color-glass: #e7edf9;
+  --color-ok: #18794e;
+  --color-ok-soft: #e3f5ec;
+  --color-warn: #a4560a;
+  --color-warn-soft: #fdf1df;
+  --color-bad: #b42318;
+  --color-bad-soft: #fde8e6;
+
+  --font-sans: "Readex Pro", system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+
+  --radius-chip: 10px;
+  --radius-panel: 18px;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 1;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-court);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* The one moment of motion: the waiting pulse while the front desk checks a payment */
+@keyframes gp-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.45; }
+}
+.gp-pulse {
+  animation: gp-pulse 1.6s ease-in-out infinite;
+}
+
+/* Hide scrollbars on the day picker row but keep it scrollable */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
