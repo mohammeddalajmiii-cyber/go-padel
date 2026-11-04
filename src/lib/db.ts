@@ -1,15 +1,16 @@
 import { Pool, type PoolClient } from "pg";
 import { SCHEMA } from "./schema";
-import { explainDbError, missingDatabaseUrl } from "./setup";
+import { databaseUrl, explainDbError, missingDatabaseUrl } from "./setup";
 
 // One shared connection pool (reused between requests and hot reloads).
 const globalForDb = globalThis as unknown as { pgPool?: Pool; dbReady?: Promise<void> };
 
 function getPool(): Pool {
   if (!globalForDb.pgPool) {
-    if (!process.env.DATABASE_URL) throw missingDatabaseUrl();
+    const url = databaseUrl();
+    if (!url) throw missingDatabaseUrl();
     globalForDb.pgPool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: url,
       max: 5,
       idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: 10_000,

@@ -28,7 +28,10 @@ export function ErrorScreen({ lang, reset }: { lang: "ar" | "en"; reset: () => v
               <li key={p}>{p}</li>
             ))}
           </ul>
-          <p className="mt-4 text-sm">After changing a setting in Vercel, open Deployments and choose Redeploy on the latest one.</p>
+          <p className="mt-4 text-sm">
+            Settings only reach the site after a new deploy: in Vercel open Deployments, click ⋯ on the top one and choose Redeploy.
+            Each setting needs the Production box ticked.
+          </p>
         </div>
       ) : (
         <div className="rounded-panel border border-line bg-white p-6">

@@ -10,11 +10,32 @@ export class SetupError extends Error {
 
 const WHERE = "Vercel → your project → Settings → Environment Variables";
 
+/**
+ * The database connection string. Vercel's Neon integration may name it
+ * DATABASE_URL, POSTGRES_URL, or add a custom prefix (e.g. STORAGE_DATABASE_URL),
+ * so all of these are accepted. Unpooled versions are used only as a last resort.
+ */
+export function databaseUrl(): string | undefined {
+  const env = process.env;
+  const direct = env.DATABASE_URL || env.POSTGRES_URL;
+  if (direct) return direct;
+  const keys = Object.keys(env).sort();
+  const pooled = keys.find((k) => /_(DATABASE|POSTGRES)_URL$/.test(k) && env[k]);
+  if (pooled) return env[pooled];
+  const any = keys.find((k) => /(DATABASE|POSTGRES)_URL/.test(k) && env[k]);
+  return any ? env[any] : undefined;
+}
+
+/** Which kind of Vercel deployment this is (production / preview / development). */
+export const deploymentKind = () => process.env.VERCEL_ENV ?? "local";
+
 export const missingDatabaseUrl = () =>
-  new SetupError(`DATABASE_URL isn't set. Add the Neon connection string in ${WHERE}, then redeploy.`);
+  new SetupError(
+    `DATABASE_URL isn't set for this ${deploymentKind()} deployment. In ${WHERE}, check it exists and that "Production" is ticked for it, then redeploy.`,
+  );
 
 export const missingAdminPassword = () =>
-  new SetupError(`ADMIN_PASSWORD isn't set. Add it in ${WHERE}, then redeploy.`);
+  new SetupError(`ADMIN_PASSWORD isn't set for this ${deploymentKind()} deployment. Add it in ${WHERE} with "Production" ticked, then redeploy.`);
 
 export const badSessionSecret = () =>
   new SetupError(`SESSION_SECRET is missing or shorter than 16 characters. Add a long random text in ${WHERE}, then redeploy.`);

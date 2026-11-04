@@ -1,5 +1,5 @@
 import { query } from "@/lib/db";
-import { explainDbError } from "@/lib/setup";
+import { deploymentKind, explainDbError } from "@/lib/setup";
 import { json } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +15,14 @@ export async function GET() {
     problems.push(setup ? setup.message : "The database answered with an error. Check the Vercel function logs for details.");
     if (!setup) console.error(err);
   }
-  if (!process.env.ADMIN_PASSWORD) problems.push("ADMIN_PASSWORD isn't set, so nobody can sign in to the front desk.");
+  const kind = deploymentKind();
+  if (!process.env.ADMIN_PASSWORD)
+    problems.push(`ADMIN_PASSWORD isn't set for this ${kind} deployment, so nobody can sign in to the front desk.`);
   if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 16)
-    problems.push("SESSION_SECRET is missing or shorter than 16 characters, so front desk sign-in won't work.");
-  return json({ ok: problems.length === 0, problems });
+    problems.push(`SESSION_SECRET is missing or shorter than 16 characters for this ${kind} deployment, so front desk sign-in won't work.`);
+  // Names only (never values) of settings this deployment can see, to spot typos.
+  const settingsFound = Object.keys(process.env)
+    .filter((k) => /DATABASE|POSTGRES|ADMIN|SESSION|^PG/.test(k))
+    .sort();
+  return json({ ok: problems.length === 0, deployment: kind, problems, settingsFound });
 }
