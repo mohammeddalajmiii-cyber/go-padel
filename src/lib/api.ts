@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { BookingError } from "./bookings";
 import { isAdminRequest } from "./auth";
+import { explainDbError } from "./setup";
 
 export const json = (data: unknown, status = 200) =>
   NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } });
@@ -11,6 +12,11 @@ export function handle(fn: () => Promise<Response>): Promise<Response> {
     if (err instanceof BookingError) {
       const status = err.code === "not_found" ? 404 : err.code === "taken" ? 409 : 400;
       return json({ error: err.code, message: err.message }, status);
+    }
+    const setup = explainDbError(err);
+    if (setup) {
+      console.error(setup.message);
+      return json({ error: "setup", message: setup.message }, 503);
     }
     console.error(err);
     return json({ error: "server", message: "Something went wrong on the server" }, 500);

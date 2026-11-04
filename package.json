@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "db:setup": "node scripts/db-setup.mjs"
+    "start": "next start"
   },
   "dependencies": {
     "next": "^15.5.7",

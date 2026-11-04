@@ -2,13 +2,14 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
+import { badSessionSecret, missingAdminPassword } from "./setup";
 
 export const COOKIE = "gp_admin";
 const MAX_AGE = 60 * 60 * 24 * 14; // stay signed in for 14 days
 
 function secret(): string {
   const s = process.env.SESSION_SECRET;
-  if (!s || s.length < 16) throw new Error("SESSION_SECRET must be set to a long random string.");
+  if (!s || s.length < 16) throw badSessionSecret();
   return s;
 }
 
@@ -22,7 +23,7 @@ function safeEqual(a: string, b: string): boolean {
 
 export function checkPassword(input: string): boolean {
   const real = process.env.ADMIN_PASSWORD;
-  if (!real) throw new Error("ADMIN_PASSWORD is not set.");
+  if (!real) throw missingAdminPassword();
   // Compare hashes so the check takes the same time whatever is typed.
   const h = (v: string) => createHmac("sha256", "gp").update(v).digest("hex");
   return safeEqual(h(String(input ?? "")), h(real));
@@ -35,6 +36,7 @@ export function createSessionToken(): string {
 
 function validToken(token: string | undefined): boolean {
   if (!token) return false;
+  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 16) return false; // not set up yet
   const [payload, sig] = token.split(".");
   if (!payload || !sig || !safeEqual(sig, sign(payload))) return false;
   return Number(payload) > Date.now() / 1000;

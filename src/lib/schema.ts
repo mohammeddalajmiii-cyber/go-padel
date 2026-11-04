@@ -1,5 +1,7 @@
--- Go Padel database schema (PostgreSQL / Neon)
--- Safe to run more than once: it only creates what is missing.
+// Database tables. The app runs this automatically the first time it connects,
+// so there is no separate setup step. Safe to run many times: it only creates
+// what is missing.
+export const SCHEMA = `
 
 -- One row of venue settings, editable from the admin panel.
 CREATE TABLE IF NOT EXISTS settings (
@@ -64,3 +66,4 @@ CREATE TABLE IF NOT EXISTS booking_slots (
   PRIMARY KEY (business_date, start_minute)
 );
 CREATE INDEX IF NOT EXISTS booking_slots_booking_idx ON booking_slots (booking_id);
+`;

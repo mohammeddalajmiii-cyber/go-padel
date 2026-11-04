@@ -18,8 +18,10 @@ const FIELDS =
 
 export async function getSettings(): Promise<Settings> {
   const rows = await query<Settings>(`SELECT ${FIELDS} FROM settings WHERE id = 1`);
-  if (!rows[0]) throw new Error("Settings row is missing. Run `npm run db:setup`.");
-  return rows[0];
+  if (rows[0]) return rows[0];
+  // The settings row was deleted by hand: put the defaults back.
+  await query("INSERT INTO settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING");
+  return (await query<Settings>(`SELECT ${FIELDS} FROM settings WHERE id = 1`))[0];
 }
 
 export function pricing(s: Settings, duration: number): { total: number; deposit: number } {

@@ -48,12 +48,11 @@ You need: a Mac with [Node.js](https://nodejs.org) (LTS) and [VS Code](https://c
 2. Click **Connect**, turn on **Connection pooling**, and copy the connection string.
 3. In the project folder, copy `.env.example` to a new file called `.env.local` and paste the string as `DATABASE_URL`.
 4. In `.env.local`, also set `ADMIN_PASSWORD` (the front desk password) and `SESSION_SECRET` (run `openssl rand -hex 32` in the terminal and paste the result).
-5. Install and create the tables:
+5. Install the packages:
    ```bash
    npm install
-   npm run db:setup
    ```
-   You should see `Database is ready.`
+   The database tables are created automatically the first time the site connects, so there's no separate setup step.
 
 ### 3. Try it on your Mac
 ```bash
@@ -77,11 +76,12 @@ From now on, every `git push` to `main` updates the live site automatically.
 ## How the code is organised
 
 ```
-db/schema.sql                 database tables (run with npm run db:setup)
 src/lib/bookings.ts           all booking rules: holding slots, payments, front desk actions
 src/lib/time.ts               opening hours, half-hour slots, after-midnight handling (Cairo time)
 src/lib/i18n.ts               all Arabic and English text on the booking site
 src/lib/settings.ts           prices, deposits, hours, InstaPay details
+src/lib/schema.ts             database tables (created automatically on first connection)
+src/lib/setup.ts              plain-English messages for setup problems
 src/app/(site)/[locale]/      booking site pages: home, /book, /booking/[code]
 src/app/admin/                front desk pages: schedule, reports, settings, login
 src/app/api/                  the server endpoints the pages talk to
@@ -96,6 +96,9 @@ Every booked half hour gets its own row in `booking_slots`, and the database ref
 
 ### InstaPay screenshots
 Screenshots are stored in the database (not on a public link) and only the front desk can see them. They're shrunk on the phone before upload and deleted automatically after 30 days.
+
+### If the site shows "Setup isn't finished"
+The site checks its own setup when a page fails and lists what's missing (for example `DATABASE_URL isn't set`). Fix it in Vercel → Settings → Environment Variables, then Deployments → Redeploy. You can also open `/api/setup-check` on your site at any time: `"ok": true` means everything is connected.
 
 ### Notes
 - There's one shared front desk password. Change it any time in Vercel's environment variables (then redeploy).
