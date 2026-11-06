@@ -1,4 +1,5 @@
 import { query } from "./db";
+import { priceFor } from "./pricing";
 
 export type Settings = {
   open_minute: number;
@@ -25,9 +26,7 @@ export async function getSettings(): Promise<Settings> {
 }
 
 export function pricing(s: Settings, duration: number): { total: number; deposit: number } {
-  return duration === 60
-    ? { total: s.price_60, deposit: s.deposit_60 }
-    : { total: s.price_30, deposit: s.deposit_30 };
+  return priceFor(s, duration);
 }
 
 /** Checks and saves new settings. Returns an error message or null. */

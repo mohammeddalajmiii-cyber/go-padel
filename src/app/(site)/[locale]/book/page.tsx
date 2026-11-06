@@ -40,8 +40,7 @@ export default async function BookPage({
         first={range.first}
         days={s.days_ahead}
         hours={{ open_minute: s.open_minute, close_minute: s.close_minute }}
-        prices={{ 30: s.price_30, 60: s.price_60 }}
-        deposits={{ 30: s.deposit_30, 60: s.deposit_60 }}
+        prices={{ price_30: s.price_30, price_60: s.price_60, deposit_30: s.deposit_30, deposit_60: s.deposit_60 }}
       />
     </div>
   );

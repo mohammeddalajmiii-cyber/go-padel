@@ -21,12 +21,14 @@ const en = {
     pricesTitle: "Prices",
     min30: "30 minutes",
     min60: "60 minutes",
+    longerTitle: "Longer games",
+    longerText: "Book up to 4 hours in one go.",
     deposit: "Deposit to confirm",
     egp: "EGP",
     hours: "Open every day from {open} to {close}",
     howTitle: "How booking works",
     steps: [
-      { t: "Choose a time", d: "Pick a day, 30 or 60 minutes, and a free start time." },
+      { t: "Choose a time", d: "Pick a day, how long you want to play (30 minutes up to 4 hours), and a free start time." },
       { t: "Pay the deposit", d: "Send the deposit with InstaPay and upload the screenshot within {hold} minutes." },
       { t: "Get confirmed", d: "The front desk checks your payment and confirms. You'll see it on your booking page and on WhatsApp." },
       { t: "Play", d: "Pay the rest at the counter in cash or by InstaPay." },
@@ -50,7 +52,7 @@ const en = {
     length: "How long?",
     time: "Start time",
     loading: "Loading times…",
-    noTimes: "No free times on this day. Try another day or a 30-minute slot.",
+    noTimes: "No free times for this length on this day. Try another day or a shorter length.",
     taken: "Booked",
     selected: "{start} – {end}",
     details: "Your details",
@@ -137,12 +139,14 @@ const ar: Dict = {
     pricesTitle: "الأسعار",
     min30: "٣٠ دقيقة",
     min60: "٦٠ دقيقة",
+    longerTitle: "وقت أطول",
+    longerText: "احجز لحد ٤ ساعات مرة واحدة.",
     deposit: "العربون للتأكيد",
     egp: "ج.م",
     hours: "مفتوح كل يوم من {open} إلى {close}",
     howTitle: "إزاي تحجز",
     steps: [
-      { t: "اختار الوقت", d: "اختار اليوم، ٣٠ أو ٦٠ دقيقة، ووقت بداية متاح." },
+      { t: "اختار الوقت", d: "اختار اليوم، والمدة اللي عايز تلعبها (من ٣٠ دقيقة لحد ٤ ساعات)، ووقت بداية متاح." },
       { t: "ادفع العربون", d: "ابعت العربون بإنستاباي وارفع صورة التحويل خلال {hold} دقيقة." },
       { t: "استنى التأكيد", d: "الاستقبال بيراجع الدفع ويأكد حجزك. هتلاقي التأكيد في صفحة الحجز وعلى واتساب." },
       { t: "العب", d: "ادفع الباقي في الكاونتر كاش أو بإنستاباي." },
@@ -166,7 +170,7 @@ const ar: Dict = {
     length: "المدة",
     time: "وقت البداية",
     loading: "بنحمّل المواعيد…",
-    noTimes: "مفيش مواعيد متاحة في اليوم ده. جرب يوم تاني أو ٣٠ دقيقة.",
+    noTimes: "مفيش مواعيد متاحة للمدة دي في اليوم ده. جرب يوم تاني أو مدة أقصر.",
     taken: "محجوز",
     selected: "{start} – {end}",
     details: "بياناتك",
@@ -245,4 +249,16 @@ export function fill(text: string, values: Record<string, string | number>): str
 /** Numbers in the right digits for the language. */
 export function num(n: number, lang: Lang): string {
   return new Intl.NumberFormat(lang === "ar" ? "ar-EG" : "en-US").format(n);
+}
+
+/** A booking length in words: "1½ hours" / "ساعة ونص". */
+export function durationLabel(minutes: number, lang: Lang): string {
+  if (lang === "ar") {
+    const ar: Record<number, string> = { 30: "٣٠ دقيقة", 60: "ساعة", 90: "ساعة ونص", 120: "ساعتين", 180: "٣ ساعات", 240: "٤ ساعات" };
+    return ar[minutes] ?? `${num(minutes, lang)} دقيقة`;
+  }
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const half = minutes % 60 === 30;
+  return `${h}${half ? "½" : ""} hour${h > 1 || half ? "s" : ""}`;
 }

@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { fill, num, t, type Lang } from "@/lib/i18n";
+import { durationLabel, fill, num, t, type Lang } from "@/lib/i18n";
 import { addDays, coveredSlots, fitsHours, formatDate, formatTime, type Hours } from "@/lib/time";
 import { normalizePhone } from "@/lib/phone";
+import { DURATIONS, priceFor, type PriceTable } from "@/lib/pricing";
 
 type Slot = { start: number; taken: boolean; past: boolean };
-type Duration = 30 | 60;
+type Duration = number;
 
 export function BookingFlow(props: {
   lang: Lang;
@@ -16,10 +17,10 @@ export function BookingFlow(props: {
   first: string;
   days: number;
   hours: Hours;
-  prices: Record<Duration, number>;
-  deposits: Record<Duration, number>;
+  prices: PriceTable;
 }) {
-  const { lang, hours, prices, deposits } = props;
+  const { lang, hours, prices } = props;
+  const cost = (dur: Duration) => priceFor(prices, dur);
   const d = t(lang);
   const b = d.book;
   const router = useRouter();
@@ -69,7 +70,9 @@ export function BookingFlow(props: {
   useEffect(() => {
     if (!slots || start === null) return;
     if (canStart(start, duration)) return;
-    if (duration === 60 && canStart(start, 30)) setDuration(30);
+    // Fall back to the longest shorter length that still fits at this time.
+    const shorter = [...DURATIONS].reverse().find((x) => x < duration && canStart(start, x));
+    if (shorter) setDuration(shorter);
     else setStart(null);
   }, [slots, start, duration, canStart]);
 
@@ -146,8 +149,8 @@ export function BookingFlow(props: {
       {/* Length */}
       <section>
         <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-dim rtl:text-sm rtl:tracking-normal">{b.length}</h2>
-        <div className="mt-3 grid max-w-md grid-cols-2 gap-2" role="radiogroup" aria-label={b.length}>
-          {([30, 60] as Duration[]).map((dur) => {
+        <div className="mt-3 grid max-w-xl grid-cols-2 gap-2 sm:grid-cols-3" role="radiogroup" aria-label={b.length}>
+          {DURATIONS.map((dur) => {
             const on = dur === duration;
             return (
               <button
@@ -155,14 +158,18 @@ export function BookingFlow(props: {
                 type="button"
                 role="radio"
                 aria-checked={on}
-                onClick={() => setDuration(dur)}
+                onClick={() => {
+                  setDuration(dur);
+                  // A longer game might not fit at the chosen time: let them pick the time again.
+                  if (start !== null && slots && !canStart(start, dur)) setStart(null);
+                }}
                 className={`rounded-2xl border px-4 py-3.5 text-start ${
                   on ? "border-lime bg-lime text-night" : "border-edge hover:border-chalk"
                 }`}
               >
-                <span className="block font-semibold">{dur === 30 ? d.home.min30 : d.home.min60}</span>
+                <span className="block font-semibold">{durationLabel(dur, lang)}</span>
                 <span className={`block text-sm ${on ? "text-night/70" : "text-dim"}`}>
-                  {num(prices[dur], lang)} {d.home.egp}
+                  {num(cost(dur).total, lang)} {d.home.egp}
                 </span>
               </button>
             );
@@ -221,7 +228,7 @@ export function BookingFlow(props: {
               <span className="font-semibold text-chalk">{formatDate(date, lang)}</span>,{" "}
               {fill(b.selected, { start: formatTime(start, lang), end: formatTime(start + duration, lang) })}
               {" · "}
-              {num(prices[duration], lang)} {d.home.egp} ({d.home.deposit}: {num(deposits[duration], lang)})
+              {durationLabel(duration, lang)} · {num(cost(duration).total, lang)} {d.home.egp} ({d.home.deposit}: {num(cost(duration).deposit, lang)})
             </>
           )}
         </p>

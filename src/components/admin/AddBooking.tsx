@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { coveredSlots, fitsHours, formatDate, formatTime, slotStarts, type Hours } from "@/lib/time";
 import { api, egp } from "./types";
+import { DURATIONS, priceFor } from "@/lib/pricing";
 
 export function AddBooking(props: {
   date: string;
@@ -31,9 +32,8 @@ export function AddBooking(props: {
 
   const free = (s: number, d: number) => fitsHours(hours, s, d) && coveredSlots(s, d).every((m) => !taken.has(m));
   const starts = useMemo(() => slotStarts(hours).filter((s) => free(s, duration)), [hours, taken, duration]); // eslint-disable-line react-hooks/exhaustive-deps
-  const lengths = kind === "manual" ? [30, 60] : Array.from({ length: (hours.close_minute - hours.open_minute) / 30 }, (_, i) => (i + 1) * 30);
-  const price = duration === 60 ? prices.price_60 : prices.price_30;
-  const deposit = duration === 60 ? prices.deposit_60 : prices.deposit_30;
+  const lengths: number[] = kind === "manual" ? [...DURATIONS] : Array.from({ length: (hours.close_minute - hours.open_minute) / 30 }, (_, i) => (i + 1) * 30);
+  const { total: price, deposit } = priceFor(prices, duration);
   const validStart = start !== null && free(start, duration);
 
   async function save(e: React.FormEvent) {
@@ -75,7 +75,7 @@ export function AddBooking(props: {
         <p className="mt-1 text-sm text-muted">{formatDate(props.date, "en")}</p>
 
         <div className="mt-5 flex gap-2">
-          <button type="button" className={tab(kind === "manual")} onClick={() => { setKind("manual"); if (duration > 60) setDuration(60); }}>
+          <button type="button" className={tab(kind === "manual")} onClick={() => { setKind("manual"); if (!(DURATIONS as readonly number[]).includes(duration)) setDuration(60); }}>
             Walk-in or phone booking
           </button>
           <button type="button" className={tab(kind === "block")} onClick={() => setKind("block")}>

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { availability } from "@/lib/bookings";
-import { fill, isLang, num, t } from "@/lib/i18n";
+import { durationLabel, fill, isLang, num, t } from "@/lib/i18n";
+import { DURATIONS, priceFor } from "@/lib/pricing";
 import { getSettings } from "@/lib/settings";
 import { addDays, businessNow, formatTime } from "@/lib/time";
 
@@ -115,7 +116,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
               {fill(h.hours, { open: formatTime(s.open_minute, lang), close: formatTime(s.close_minute, lang) })}
             </p>
           </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
             {prices.map((p) => (
               <div
                 key={p.label}
@@ -132,6 +133,22 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
                 </span>
               </div>
             ))}
+
+            {/* 1½ to 4 hours, priced from the hourly and half-hour rates */}
+            <div className="flex flex-col gap-4 rounded-3xl border border-edge bg-surface p-7">
+              <span className="text-sm font-bold uppercase tracking-[0.14em] text-dim rtl:tracking-normal">{h.longerTitle}</span>
+              <dl className="divide-y divide-edge">
+                {DURATIONS.filter((m) => m > 60).map((m) => (
+                  <div key={m} className="flex items-baseline justify-between gap-4 py-2">
+                    <dt className="font-semibold">{durationLabel(m, lang)}</dt>
+                    <dd className="gp-figure text-xl">
+                      {num(priceFor(s, m).total, lang)} <span className="text-sm font-semibold text-dim">{h.egp}</span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <span className="text-sm text-dim">{h.longerText}</span>
+            </div>
           </div>
         </section>
 

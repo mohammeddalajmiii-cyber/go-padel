@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { fill, num, t, type Lang } from "@/lib/i18n";
+import { durationLabel, fill, num, t, type Lang } from "@/lib/i18n";
 import { formatDate, formatTime } from "@/lib/time";
 import { shrinkImage } from "@/lib/image";
 
@@ -80,7 +80,7 @@ export function BookingStatus({ lang, code }: { lang: Lang; code: string }) {
       <span className="block text-dim">
         {formatTime(data.start, lang)} – {formatTime(data.start + data.duration, lang)}
         {" · "}
-        {data.duration === 30 ? d.home.min30 : d.home.min60}
+        {durationLabel(data.duration, lang)}
       </span>
     </>
   );

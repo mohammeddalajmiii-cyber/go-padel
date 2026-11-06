@@ -7,6 +7,7 @@ import { getSettings, pricing, type Settings } from "./settings";
 import { addDays, businessNow, coveredSlots, fitsHours, formatDate, formatTime, isDate, slotStarts } from "./time";
 import { normalizePhone, whatsappLink } from "./phone";
 import { fill, num, t, type Lang } from "./i18n";
+import { isDuration } from "./pricing";
 
 export type Status = "holding" | "reviewing" | "confirmed" | "paid" | "rejected" | "expired" | "cancelled";
 export const LIVE: Status[] = ["holding", "reviewing", "confirmed", "paid"];
@@ -132,7 +133,7 @@ export async function createOnlineBooking(input: {
   const start = Number(input.start);
   const duration = Number(input.duration);
   if (!isDate(input.date) || input.date < first || input.date > last) throw new BookingError("invalid", "date");
-  if (duration !== 30 && duration !== 60) throw new BookingError("invalid", "duration");
+  if (!isDuration(duration)) throw new BookingError("invalid", "duration");
   if (!fitsHours(s, start, duration)) throw new BookingError("invalid", "time");
   if (name.length < 2) throw new BookingError("invalid", "name");
   if (!phone) throw new BookingError("invalid", "phone");
@@ -303,7 +304,7 @@ export async function adminCreate(input: {
   const duration = Number(input.duration);
   const kind = input.kind === "block" ? "block" : "manual";
   if (!isDate(input.date)) throw new BookingError("invalid", "Choose a day");
-  if (kind === "manual" && duration !== 30 && duration !== 60) throw new BookingError("invalid", "Choose 30 or 60 minutes");
+  if (kind === "manual" && !isDuration(duration)) throw new BookingError("invalid", "Choose a length from 30 minutes to 4 hours");
   if (!Number.isInteger(duration) || duration <= 0 || duration % 30) throw new BookingError("invalid", "Choose a length");
   if (!fitsHours(s, start, duration)) throw new BookingError("invalid", "That time is outside opening hours");
 
