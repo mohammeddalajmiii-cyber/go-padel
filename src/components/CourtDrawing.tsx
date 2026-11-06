@@ -22,7 +22,6 @@ const H = 10 * S;
 const sx = (x: number) => OX + S * x;
 const sy = (y: number) => OY + S * y;
 const NETX = 10;
-const SERVICE = 6.95;
 
 type V = { x: number; y: number };
 type Team = "L" | "R";
@@ -433,10 +432,10 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
 type Look = { shirt: string; hair: string; skin: string; legs?: string };
 
 /** One person seen from above, facing +x, centred on their shoulders. Drawn a little larger than life so it reads at card size. */
-function Person({ look, racket, seated, swingRef }: { look: Look; racket?: string; seated?: boolean; swingRef?: (el: SVGGElement | null) => void }) {
+function Person({ look, racket, seated, swingRef, noShadow }: { look: Look; racket?: string; seated?: boolean; swingRef?: (el: SVGGElement | null) => void; noShadow?: boolean }) {
   return (
     <g transform="scale(1.32)">
-      <ellipse cx="1.4" cy="1.7" rx={seated ? 4.6 : 3.4} ry="3.9" fill="#000" opacity="0.42" filter="url(#gpc-soft)" />
+      {!noShadow && <ellipse cx="1.4" cy="1.7" rx={seated ? 4.6 : 3.4} ry="3.9" fill="#000" opacity="0.42" filter="url(#gpc-soft)" />}
       {seated && (
         <g fill={look.legs ?? "#2b2f36"}>
           <rect x="0.4" y="-2.1" width="4.4" height="1.75" rx="0.85" />
@@ -508,6 +507,20 @@ const LIGHTS: [number, number][] = [
 ];
 const POINTS = ["0", "15", "30", "40"];
 
+// Each post throws a short shadow into the court, away from its nearest floodlight.
+const POST_SHADOWS: [number, number, number, number][] = POSTS.flatMap(([x, y]) => {
+  const [lx, ly] = LIGHTS.reduce((a, b) => (Math.hypot(b[0] - x, b[1] - y) < Math.hypot(a[0] - x, a[1] - y) ? b : a));
+  const dx = x - lx;
+  const dy = y - ly;
+  const l = Math.hypot(dx, dy) || 1;
+  const ux = dx / l;
+  const uy = dy / l;
+  const inward = (x <= OX ? ux : x >= OX + W ? -ux : 0) + (y <= OY ? uy : y >= OY + H ? -uy : 0);
+  if (inward <= 0.15) return [];
+  const k = 10 + 6 * inward;
+  return [[x, y, x + ux * k, y + uy * k]];
+});
+
 /** A palm seen from above. */
 function Palm({ x, y, r }: { x: number; y: number; r: number }) {
   const leaves = 11;
@@ -536,6 +549,7 @@ export function CourtDrawing({ className }: { className?: string }) {
   const sideFlash = useRef<SVGEllipseElement | null>(null);
   const caption = useRef<SVGTextElement | null>(null);
   const watchers = useRef<(SVGGElement | null)[]>([]);
+  const shadows = useRef<Record<string, SVGEllipseElement | null>>({});
   const scoreL = useRef<SVGTextElement | null>(null);
   const scoreR = useRef<SVGTextElement | null>(null);
   const gamesL = useRef<SVGTextElement | null>(null);
@@ -546,7 +560,8 @@ export function CourtDrawing({ className }: { className?: string }) {
   const start = formation(first);
 
   useEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    // People who turn off motion get one still frame of the court (with its shadows).
+    const still = !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
     let score = first;
     let shown = first;
@@ -591,7 +606,7 @@ export function CourtDrawing({ className }: { className?: string }) {
     const draw = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      if (visible && !document.hidden) sim += dt;
+      if (visible && !document.hidden && !still) sim += dt;
       while (sim >= plan.end) {
         const from = {} as Record<PID, V>;
         for (const p of PIDS) from[p] = posIn(plan.moves[p], plan.from[p], plan.end);
@@ -614,6 +629,22 @@ export function CourtDrawing({ className }: { className?: string }) {
         }
         facing[p] += (want - facing[p]) * 0.12;
         players.current[p]?.setAttribute("transform", `translate(${sx(pos.x).toFixed(2)} ${sy(pos.y).toFixed(2)}) rotate(${facing[p].toFixed(1)})`);
+        // Four floodlight shadows: longer and fainter the further the light.
+        const px = sx(pos.x);
+        const py = sy(pos.y);
+        LIGHTS.forEach(([lx, ly], i) => {
+          const el = shadows.current[`${p}${i}`];
+          if (!el) return;
+          const dx = px - lx;
+          const dy = py - ly;
+          const l = Math.hypot(dx, dy) || 1;
+          const reach = 2.6 + l * 0.018;
+          el.setAttribute("cx", (px + (dx / l) * reach).toFixed(2));
+          el.setAttribute("cy", (py + (dy / l) * reach).toFixed(2));
+          el.setAttribute("rx", (3.2 + l * 0.012).toFixed(2));
+          el.setAttribute("transform", `rotate(${((Math.atan2(dy, dx) * 180) / Math.PI).toFixed(1)} ${(px + (dx / l) * reach).toFixed(2)} ${(py + (dy / l) * reach).toFixed(2)})`);
+          el.setAttribute("opacity", Math.max(0.08, 0.34 - l * 0.0011).toFixed(2));
+        });
         swings.current[p]?.setAttribute("transform", `rotate(${swingAngle(p, t).toFixed(1)})`);
       }
 
@@ -681,7 +712,7 @@ export function CourtDrawing({ className }: { className?: string }) {
         if (gamesR.current) gamesR.current.textContent = String(sc.g[1]);
       }
 
-      frame = requestAnimationFrame(draw);
+      if (!still) frame = requestAnimationFrame(draw);
     };
     frame = requestAnimationFrame(draw);
     return () => {
@@ -696,28 +727,13 @@ export function CourtDrawing({ className }: { className?: string }) {
   return (
     <svg ref={root} viewBox="0 0 300 200" className={`gp-court ${className ?? ""}`} role="img" aria-label="Padel court seen from above with a doubles match in play">
       <defs>
-        <linearGradient id="gpc-turf" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#2257bd" />
-          <stop offset="1" stopColor="#1a4398" />
-        </linearGradient>
-        <pattern id="gpc-rows" width="6" height="6" patternUnits="userSpaceOnUse">
-          <rect width="3" height="6" fill="#fff" opacity="0.025" />
-        </pattern>
         <pattern id="gpc-tiles" width="12" height="12" patternUnits="userSpaceOnUse">
           <rect width="12" height="12" fill="#131313" />
           <path d="M12 0H0V12" fill="none" stroke="#1b1b1b" strokeWidth="0.5" />
         </pattern>
-        <filter id="gpc-grain" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="2" seed="4" />
-          <feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.09 0" />
-        </filter>
         <filter id="gpc-soft" x="-50%" y="-50%" width="200%" height="200%">
           <feGaussianBlur stdDeviation="0.7" />
         </filter>
-        <radialGradient id="gpc-pool">
-          <stop offset="0" stopColor="#fff" stopOpacity="0.16" />
-          <stop offset="1" stopColor="#fff" stopOpacity="0" />
-        </radialGradient>
         <radialGradient id="gpc-shade" cx="0.4" cy="0.45" r="0.7">
           <stop offset="0" stopColor="#fff" stopOpacity="0.16" />
           <stop offset="0.6" stopColor="#fff" stopOpacity="0" />
@@ -741,34 +757,37 @@ export function CourtDrawing({ className }: { className?: string }) {
       <Palm x={6} y={8} r={15} />
       <Palm x={293} y={193} r={14} />
 
-      {/* Turf */}
-      <rect x={OX} y={OY} width={W} height={H} fill="url(#gpc-turf)" />
-      <rect x={OX} y={OY} width={W} height={H} fill="url(#gpc-rows)" />
-      <rect x={OX} y={OY} width={W} height={H} filter="url(#gpc-grain)" opacity="0.6" />
-      <g clipPath="url(#gpc-court)">
-        {LIGHTS.map(([x, y]) => (
-          <ellipse key={`p${x}-${y}`} cx={x + (x < NET_SX ? 40 : -40)} cy={y + (y < 100 ? 30 : -30)} rx="90" ry="62" fill="url(#gpc-pool)" />
+      {/* Turf: blue artificial grass with sand infill, wear, roll seams, lines and the club logo (public/court-turf.jpg) */}
+      <image href="/court-turf.jpg" x={OX} y={OY} width={W} height={H} preserveAspectRatio="none" />
+
+      {/* Shadows of the steel posts, thrown away from the nearest floodlight */}
+      <g filter="url(#gpc-soft)" clipPath="url(#gpc-court)">
+        {POST_SHADOWS.map(([x1, y1, x2, y2], i) => (
+          <line key={`ps${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#000" strokeWidth="1.3" strokeLinecap="round" opacity="0.2" />
         ))}
       </g>
 
-      {/* Club logo painted behind each service line */}
-      {[sx(1.55), sx(18.45)].map((x, i) => (
-        <g key={`logo${x}`} transform={`translate(${x} ${sy(5)}) rotate(${i ? 90 : -90})`} opacity="0.13" fill="#fff">
-          <text x="0" y="1.6" textAnchor="middle" fontFamily="Inter, sans-serif" fontWeight="700" fontSize="4.6" letterSpacing="0.9">
-            GO PADEL
-          </text>
+      {/* Each player casts four soft shadows, one from each floodlight */}
+      {PIDS.map((p) => (
+        <g key={`sh${p}`} filter="url(#gpc-soft)">
+          {LIGHTS.map((_, i) => (
+            <ellipse
+              key={i}
+              ref={(el: SVGEllipseElement | null) => {
+                shadows.current[`${p}${i}`] = el;
+              }}
+              rx="4.4"
+              ry="2.3"
+              fill="#000"
+              opacity="0"
+            />
+          ))}
         </g>
       ))}
 
-      {/* Lines */}
-      <g stroke="#f2f4f8" strokeWidth="0.8" fill="none" opacity="0.92">
-        <line x1={sx(NETX - SERVICE)} y1={OY} x2={sx(NETX - SERVICE)} y2={OY + H} />
-        <line x1={sx(NETX + SERVICE)} y1={OY} x2={sx(NETX + SERVICE)} y2={OY + H} />
-        <line x1={sx(NETX - SERVICE)} y1={sy(5)} x2={sx(NETX + SERVICE)} y2={sy(5)} />
-      </g>
-
       {/* Net */}
       <line x1={NET_SX + 1.6} y1={OY - 1} x2={NET_SX + 1.6} y2={OY + H + 1} stroke="#000" strokeWidth="2.2" opacity="0.28" filter="url(#gpc-soft)" />
+      <line x1={NET_SX - 1.8} y1={OY - 1} x2={NET_SX - 1.8} y2={OY + H + 1} stroke="#000" strokeWidth="2" opacity="0.16" filter="url(#gpc-soft)" />
       <line x1={NET_SX} y1={OY - 1.5} x2={NET_SX} y2={OY + H + 1.5} stroke="#0d0d0d" strokeWidth="1.4" opacity="0.75" />
       <line x1={NET_SX} y1={OY - 1.5} x2={NET_SX} y2={OY + H + 1.5} stroke="#f5f5f5" strokeWidth="0.55" />
       <line ref={netFlash} x1={NET_SX} y1={OY} x2={NET_SX} y2={OY + H} stroke="#ffffff" strokeWidth="2.4" opacity="0" filter="url(#gpc-soft)" />
@@ -785,6 +804,7 @@ export function CourtDrawing({ className }: { className?: string }) {
           transform={`translate(${sx(start[p].x)} ${sy(start[p].y)}) rotate(${TEAM[p] === "L" ? 0 : 180})`}
         >
           <Person
+            noShadow
             look={LOOKS[p].look}
             racket={LOOKS[p].rim}
             swingRef={(el) => {
