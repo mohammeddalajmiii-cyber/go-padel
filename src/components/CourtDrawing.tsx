@@ -57,6 +57,9 @@ const partnerOf = (p: PID) => PIDS.find((q) => TEAM[q] === TEAM[p] && q !== p)!;
 const playerAt = (t: Team, h: Half) => PIDS.find((q) => TEAM[q] === t && HALF[q] === h)!;
 
 // ---------- Plans ----------
+/** A stroke: low ball (bend), volley, overhead smash, underhand serve, or a dive for a ball they won't reach. */
+type SwingKind = "low" | "volley" | "over" | "serve" | "lunge";
+type Swing = { pid: PID; t: number; kind: SwingKind; bend: number };
 type Seg = { t0: number; t1: number; a: V; b: V; h0: number; h1: number; peak: number };
 type Move = { t0: number; t1: number; a: V; b: V };
 type Score = { p: [number, number]; g: [number, number]; server: Team };
@@ -66,7 +69,7 @@ type Plan = {
   segs: Seg[];
   moves: Record<PID, Move[]>;
   from: Record<PID, V>;
-  swings: { pid: PID; t: number }[];
+  swings: Swing[];
   flashes: { t: number; p: V; kind: "glass" | "side" | "net" }[];
   scoreAt: number;
   score: Score;
@@ -149,6 +152,7 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
     const p = playerAt(team, at.y < 5 ? "top" : "bottom");
     const cur = posAt(p, t0);
     move(p, t0 + 0.15, t1, add(cur, mul(sub(sub(at, hand(team)), cur), reach)));
+    swings.push({ pid: p, t: t1, kind: "lunge", bend: 0.95 });
   };
 
   /**
@@ -182,7 +186,7 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
     let K = inCourt(add(P, mul(dir, rand(1.5, 2.5))));
     K = { x: team === "L" ? Math.max(K.x, 1.3) : Math.min(K.x, 18.7), y: K.y };
     const tK = tP + dist(P, K) / (v * 0.7);
-    segs.push({ t0: tP, t1: tK, a: P, b: K, h0: h, h1: 0.95, peak: h + 0.3 });
+    segs.push({ t0: tP, t1: tK, a: P, b: K, h0: h, h1: rand(0.35, 0.95), peak: h + 0.3 });
     return { K, tK };
   };
 
@@ -218,11 +222,21 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
     const oT = other(hT);
     const hp = posAt(hitter, t);
     const atNet = fromNet(hp.x) < 4.2;
-    swings.push({ pid: hitter, t });
+    // How high the ball is as it's struck decides the stroke: bend for low balls, reach up for overheads.
+    const cH = segs.length ? segs[segs.length - 1].h1 : 1.0;
 
     const type: Shot =
       forced ?? (n === 0 ? "serve" : atNet ? (Math.random() < 0.13 ? "lob" : "volley") : Math.random() < 0.32 ? "lob" : "drive");
     forced = null;
+    swings.push(
+      type === "serve"
+        ? { pid: hitter, t, kind: "serve", bend: 0.35 }
+        : type === "smash"
+          ? { pid: hitter, t, kind: "over", bend: 0 }
+          : cH >= 1.05
+            ? { pid: hitter, t, kind: "volley", bend: 0.12 }
+            : { pid: hitter, t, kind: "low", bend: clamp((1.15 - cH) / 0.8, 0.2, 0.9) },
+    );
 
     // ----- Does this shot end the point? -----
     const endChance = n < 2 ? 0 : n > 16 ? 1 : type === "smash" ? 0.6 : Math.min(0.45, 0.05 + n * 0.04);
@@ -269,7 +283,7 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
         // Lob winner: over the net players, dies off the back glass.
         const B = { x: depthX(oT, rand(8.4, 8.9)), y: rand(1.5, 8.5) };
         const tB = t + dist(C, B) / SPEED.lob;
-        segs.push({ t0: t, t1: tB, a: C, b: B, h0: 1.0, h1: 0, peak: 5.8 });
+        segs.push({ t0: t, t1: tB, a: C, b: B, h0: cH, h1: 0, peak: 5.8 });
         const d = norm(sub(B, C));
         const u = Math.max(0.15, (wallX(oT) - B.x) / d.x);
         const Wp = inCourt({ x: wallX(oT), y: B.y + d.y * u });
@@ -292,7 +306,7 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
         const top = Math.random() < 0.5;
         const B = { x: depthX(oT, rand(3.0, 4.6)), y: top ? rand(0.7, 1.2) : rand(8.8, 9.3) };
         const tB = t + dist(C, B) / 16;
-        segs.push({ t0: t, t1: tB, a: C, b: B, h0: 1.05, h1: 0, peak: 1.1 });
+        segs.push({ t0: t, t1: tB, a: C, b: B, h0: cH, h1: 0, peak: 1.1 });
         const Sd = { x: B.x + (oT === "L" ? -1.2 : 1.2), y: top ? 0.12 : 9.88 };
         const tS = tB + dist(B, Sd) / 10;
         segs.push({ t0: tB, t1: tS, a: B, b: Sd, h0: 0, h1: 0.7, peak: 0.9 });
@@ -309,7 +323,7 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
         // Into the net.
         const N = { x: NETX + (hT === "L" ? -0.1 : 0.1), y: clamp(C.y + rand(-1.6, 1.6), 0.8, 9.2) };
         const tN = t + dist(C, N) / 14;
-        segs.push({ t0: t, t1: tN, a: C, b: N, h0: 1.0, h1: 0.55, peak: 1.0 });
+        segs.push({ t0: t, t1: tN, a: C, b: N, h0: cH, h1: 0.55, peak: Math.max(1.0, cH) });
         flashes.push({ t: tN, p: N, kind: "net" });
         const D = { x: depthX(hT, 0.7), y: N.y + 0.1 };
         segs.push({ t0: tN, t1: tN + 0.34, a: N, b: D, h0: 0.55, h1: 0, peak: 0.6 });
@@ -323,7 +337,7 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
         const r = Math.random();
         const B = { x: depthX(oT, rand(4.8, 7.2)), y: r < 0.45 ? rand(4.4, 5.6) : r < 0.72 ? rand(0.9, 1.4) : rand(8.6, 9.1) };
         const tB = t + dist(C, B) / 16.5;
-        segs.push({ t0: t, t1: tB, a: C, b: B, h0: 1.1, h1: 0, peak: 1.2 });
+        segs.push({ t0: t, t1: tB, a: C, b: B, h0: cH, h1: 0, peak: 1.2 });
         const d = norm(sub(B, C));
         const u = Math.max(0.5, (wallX(oT) - B.x) / d.x);
         const Wp = inCourt({ x: wallX(oT), y: B.y + d.y * u });
@@ -354,7 +368,7 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
     if (type !== "serve") B = { x: B.x, y: lerp(B.y, posAt(rcv, t).y, 0.3) };
     const rPart = partnerOf(rcv);
     const speed = SPEED[type];
-    const h0 = type === "serve" ? 0.9 : type === "smash" ? 2.6 : 1.0;
+    const h0 = type === "serve" ? 0.9 : type === "smash" ? 2.6 : cH;
     const rcvAtNet = fromNet(posAt(rcv, t).x) < 4.2;
 
     let K: V | null = null;
@@ -366,7 +380,7 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
       const u = clamp((ix - C.x) / (B.x - C.x), 0.3, 0.95);
       K = inCourt({ x: ix, y: lerp(C.y, B.y, u) });
       tK = t + dist(C, K) / speed;
-      segs.push({ t0: t, t1: tK, a: C, b: K, h0: 1.0, h1: 2.6, peak: 5.2 });
+      segs.push({ t0: t, t1: tK, a: C, b: K, h0: cH, h1: 2.6, peak: 5.2 });
       forced = "smash";
     } else if (rcvAtNet && (type === "drive" || type === "volley") && Math.random() < 0.7) {
       // A net player cuts off a flat ball before it bounces: quick volleys.
@@ -375,7 +389,8 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
       if (u > 0.25 && u < 0.95) {
         K = inCourt({ x: ix, y: lerp(C.y, B.y, u) });
         tK = t + dist(C, K) / speed;
-        segs.push({ t0: t, t1: tK, a: C, b: K, h0: 1.0, h1: 1.1, peak: 1.35 });
+        const hv = rand(0.85, 1.3);
+        segs.push({ t0: t, t1: tK, a: C, b: K, h0: cH, h1: hv, peak: Math.max(1.35, hv + 0.2) });
       }
     }
 
@@ -396,7 +411,7 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
       } else {
         K = inCourt(after);
         tK = tB + carry / v2;
-        segs.push({ t0: tB, t1: tK, a: B, b: K, h0: 0, h1: 0.95, peak: type === "lob" ? 2.0 : 1.15 });
+        segs.push({ t0: tB, t1: tK, a: B, b: K, h0: 0, h1: rand(0.45, 1.0), peak: type === "lob" ? 2.0 : 1.15 });
       }
     }
 
@@ -429,30 +444,21 @@ function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
 }
 
 // ---------- Drawing ----------
-type Look = { shirt: string; hair: string; skin: string; legs?: string };
+type Look = { shirt: string; hair: string; skin: string; legs?: string; shorts?: string; shoe?: string };
 
-/** One person seen from above, facing +x, centred on their shoulders. Drawn a little larger than life so it reads at card size. */
-function Person({ look, racket, seated, swingRef, noShadow }: { look: Look; racket?: string; seated?: boolean; swingRef?: (el: SVGGElement | null) => void; noShadow?: boolean }) {
+/** A spectator seen from above (seated or standing still), facing +x, centred on their shoulders. Drawn a little larger than life so it reads at card size. */
+function Person({ look, seated }: { look: Look; seated?: boolean }) {
   return (
     <g transform="scale(1.32)">
-      {!noShadow && <ellipse cx="1.4" cy="1.7" rx={seated ? 4.6 : 3.4} ry="3.9" fill="#000" opacity="0.42" filter="url(#gpc-soft)" />}
+      <ellipse cx="1.4" cy="1.7" rx={seated ? 4.6 : 3.4} ry="3.9" fill="#000" opacity="0.42" filter="url(#gpc-soft)" />
       {seated && (
         <g fill={look.legs ?? "#2b2f36"}>
           <rect x="0.4" y="-2.1" width="4.4" height="1.75" rx="0.85" />
           <rect x="0.4" y="0.35" width="4.4" height="1.75" rx="0.85" />
         </g>
       )}
-      <rect x="-0.5" y={racket ? -3.95 : -3.7} width={racket ? 3.1 : seated ? 3.3 : 2.3} height="1.1" rx="0.55" fill={look.skin} transform={`rotate(${racket ? -8 : -3} -0.5 -3.4)`} />
-      {racket ? (
-        <g ref={swingRef}>
-          <rect x="-0.4" y="2.8" width="3.6" height="1.15" rx="0.57" fill={look.skin} transform="rotate(22 -0.4 3.3)" />
-          <line x1="2.6" y1="5" x2="3.5" y2="5.8" stroke="#111" strokeWidth="0.7" strokeLinecap="round" />
-          <ellipse cx="4.6" cy="6.75" rx="1.55" ry="1.95" transform="rotate(-40 4.6 6.75)" fill="#151515" stroke={racket} strokeWidth="0.42" />
-          <ellipse cx="4.45" cy="6.55" rx="0.6" ry="0.85" transform="rotate(-40 4.45 6.55)" fill="#fff" opacity="0.08" />
-        </g>
-      ) : (
-        <rect x="-0.5" y="2.6" width={seated ? 3.3 : 2.3} height="1.1" rx="0.55" fill={look.skin} transform="rotate(3 -0.5 3.2)" />
-      )}
+      <rect x="-0.5" y="-3.7" width={seated ? 3.3 : 2.3} height="1.1" rx="0.55" fill={look.skin} transform="rotate(-3 -0.5 -3.4)" />
+      <rect x="-0.5" y="2.6" width={seated ? 3.3 : 2.3} height="1.1" rx="0.55" fill={look.skin} transform="rotate(3 -0.5 3.2)" />
       <rect x="-1.8" y="-3.6" width="3.6" height="7.2" rx="1.75" fill={look.shirt} />
       <rect x="-1.8" y="-3.6" width="3.6" height="7.2" rx="1.75" fill="url(#gpc-shade)" />
       <ellipse cx="1.25" cy="0" rx="0.75" ry="1.05" fill={look.skin} />
@@ -462,11 +468,116 @@ function Person({ look, racket, seated, swingRef, noShadow }: { look: Look; rack
   );
 }
 
+/** The parts of a moving figure that the animation updates every frame. */
+type FigRefs = {
+  body: SVGGElement | null;
+  head: SVGGElement | null;
+  arm: SVGGElement | null;
+  swing: SVGGElement | null;
+  legL: SVGLineElement | null;
+  legR: SVGLineElement | null;
+  shortL: SVGLineElement | null;
+  shortR: SVGLineElement | null;
+  footL: SVGEllipseElement | null;
+  footR: SVGEllipseElement | null;
+};
+const newFig = (): FigRefs => ({ body: null, head: null, arm: null, swing: null, legL: null, legR: null, shortL: null, shortR: null, footL: null, footR: null });
+
+// Hips and resting feet, in the figure's own units (facing +x, before the 1.32 scale).
+const HIP_L: V = { x: -0.3, y: -0.85 };
+const HIP_R: V = { x: -0.3, y: 0.85 };
+// Ready stance: feet a little apart and just ahead of the shoulders, so the shoes show from above.
+const FOOT_L: V = { x: 1.85, y: -1.45 };
+const FOOT_R: V = { x: 1.85, y: 1.45 };
+
+/**
+ * A person on their feet, seen from above, facing +x. Legs show when they stride,
+ * the back leans and lengthens when they bend, and the racket arm swings.
+ */
+function Figure({ look, racket, r }: { look: Look; racket?: string; r: FigRefs }) {
+  const shorts = look.shorts ?? "#2a2d33";
+  const shoe = look.shoe ?? "#e8e8e6";
+  return (
+    <g transform="scale(1.32)">
+      {/* legs: shorts at the top, skin below, shoes */}
+      <line ref={(el: SVGLineElement | null) => { r.legL = el; }} x1={HIP_L.x} y1={HIP_L.y} x2={FOOT_L.x} y2={FOOT_L.y} stroke={look.skin} strokeWidth="0.95" strokeLinecap="round" />
+      <line ref={(el: SVGLineElement | null) => { r.legR = el; }} x1={HIP_R.x} y1={HIP_R.y} x2={FOOT_R.x} y2={FOOT_R.y} stroke={look.skin} strokeWidth="0.95" strokeLinecap="round" />
+      <line ref={(el: SVGLineElement | null) => { r.shortL = el; }} x1={HIP_L.x} y1={HIP_L.y} x2={HIP_L.x} y2={HIP_L.y} stroke={shorts} strokeWidth="1.35" strokeLinecap="round" />
+      <line ref={(el: SVGLineElement | null) => { r.shortR = el; }} x1={HIP_R.x} y1={HIP_R.y} x2={HIP_R.x} y2={HIP_R.y} stroke={shorts} strokeWidth="1.35" strokeLinecap="round" />
+      <ellipse ref={(el: SVGEllipseElement | null) => { r.footL = el; }} cx={FOOT_L.x} cy={FOOT_L.y} rx="0.85" ry="0.48" fill={shoe} />
+      <ellipse ref={(el: SVGEllipseElement | null) => { r.footR = el; }} cx={FOOT_R.x} cy={FOOT_R.y} rx="0.85" ry="0.48" fill={shoe} />
+      {/* back and shoulders, with the free arm */}
+      <g ref={(el: SVGGElement | null) => { r.body = el; }}>
+        <rect x="-0.5" y={racket ? -3.95 : -3.7} width={racket ? 3.1 : 2.3} height="1.1" rx="0.55" fill={look.skin} transform={`rotate(${racket ? -8 : -3} -0.5 -3.4)`} />
+        <rect x="-1.8" y="-3.6" width="3.6" height="7.2" rx="1.75" fill={look.shirt} />
+        <rect x="-1.8" y="-3.6" width="3.6" height="7.2" rx="1.75" fill="url(#gpc-shade)" />
+      </g>
+      {racket ? (
+        <g ref={(el: SVGGElement | null) => { r.swing = el; }}>
+          <rect x="-0.4" y="2.8" width="3.6" height="1.15" rx="0.57" fill={look.skin} transform="rotate(22 -0.4 3.3)" />
+          <line x1="2.6" y1="5" x2="3.5" y2="5.8" stroke="#111" strokeWidth="0.7" strokeLinecap="round" />
+          <ellipse cx="4.6" cy="6.75" rx="1.55" ry="1.95" transform="rotate(-40 4.6 6.75)" fill="#151515" stroke={racket} strokeWidth="0.42" />
+          <ellipse cx="4.45" cy="6.55" rx="0.6" ry="0.85" transform="rotate(-40 4.45 6.55)" fill="#fff" opacity="0.08" />
+        </g>
+      ) : (
+        <g ref={(el: SVGGElement | null) => { r.arm = el; }}>
+          <rect x="-0.5" y="2.6" width="2.3" height="1.1" rx="0.55" fill={look.skin} transform="rotate(3 -0.5 3.2)" />
+        </g>
+      )}
+      <g ref={(el: SVGGElement | null) => { r.head = el; }}>
+        <ellipse cx="1.25" cy="0" rx="0.75" ry="1.05" fill={look.skin} />
+        <circle cx="0.25" cy="0" r="1.42" fill={look.hair} />
+        <circle cx="-0.15" cy="-0.45" r="0.6" fill="#fff" opacity="0.1" />
+      </g>
+    </g>
+  );
+}
+
+/** Put a figure in a pose: where each foot is, how far they bend, the racket or arm angle, a head nod. */
+function pose(r: FigRefs, o: { fl: V; fr: V; bend: number; swing?: number; arm?: number; nod?: number }) {
+  const b = o.bend;
+  const leg = (line: SVGLineElement | null, short: SVGLineElement | null, foot: SVGEllipseElement | null, hip: V, f: V) => {
+    line?.setAttribute("x2", f.x.toFixed(2));
+    line?.setAttribute("y2", f.y.toFixed(2));
+    short?.setAttribute("x2", lerp(hip.x, f.x, 0.42).toFixed(2));
+    short?.setAttribute("y2", lerp(hip.y, f.y, 0.42).toFixed(2));
+    foot?.setAttribute("cx", f.x.toFixed(2));
+    foot?.setAttribute("cy", f.y.toFixed(2));
+  };
+  leg(r.legL, r.shortL, r.footL, HIP_L, o.fl);
+  leg(r.legR, r.shortR, r.footR, HIP_R, o.fr);
+  // Bending forward: from above the back looks longer and the head moves out over the feet.
+  r.body?.setAttribute("transform", `translate(${(b * 1.1).toFixed(2)} 0) scale(${(1 + b * 0.32).toFixed(3)} ${(1 - b * 0.06).toFixed(3)})`);
+  r.head?.setAttribute("transform", `translate(${(b * 2.1 + (o.nod ?? 0)).toFixed(2)} 0) scale(${(1 - b * 0.12).toFixed(3)})`);
+  r.swing?.setAttribute("transform", `translate(${(b * 0.9).toFixed(2)} 0) rotate(${(o.swing ?? 0).toFixed(1)})`);
+  r.arm?.setAttribute("transform", `rotate(${(o.arm ?? 0).toFixed(1)} -0.5 3.2)`);
+}
+
+// Small groups standing and chatting, facing each other.
+type Talker = { x: number; y: number; group: number; look: Look };
+const GROUPS: V[] = [
+  { x: 36, y: 186.5 },
+  { x: 100, y: 15.5 },
+  { x: 286.5, y: 100 },
+];
+const TALKERS: Talker[] = [
+  { x: 29.5, y: 183.5, group: 0, look: { shirt: "#3d4b3a", hair: "#1a1410", skin: "#a8785a", shorts: "#2a2d33", shoe: "#d9d6cf" } },
+  { x: 42.5, y: 183.5, group: 0, look: { shirt: "#e9e5dc", hair: "#4a3626", skin: "#d2a684", shorts: "#3a4a5e", shoe: "#ffffff" } },
+  { x: 36, y: 192.5, group: 0, look: { shirt: "#7a2f2f", hair: "#120e0b", skin: "#8d5f43", shorts: "#1f2229", shoe: "#c8f031" } },
+  { x: 93, y: 15.5, group: 1, look: { shirt: "#22252b", hair: "#6b4f35", skin: "#c99a76", shorts: "#2f3540", shoe: "#ffffff" } },
+  { x: 107, y: 15.5, group: 1, look: { shirt: "#b8a68a", hair: "#15110e", skin: "#b98a68", shorts: "#2a2d33", shoe: "#e8e8e6" } },
+  { x: 286.5, y: 93, group: 2, look: { shirt: "#4a5a6e", hair: "#2c2018", skin: "#c69a78", shorts: "#22252b", shoe: "#e8e8e6" } },
+  { x: 286.5, y: 107, group: 2, look: { shirt: "#d9d4c8", hair: "#3b2a1e", skin: "#a8785a", shorts: "#3c3a35", shoe: "#ffffff" } },
+];
+const COURT_CENTRE: V = { x: sx(NETX), y: sy(5) };
+const angleTo = (from: V, to: V) => (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
+const turn = (from: number, to: number) => ((to - from + 540) % 360) - 180;
+
 const LOOKS: Record<PID, { look: Look; rim: string }> = {
-  L1: { look: { shirt: "#ecebe6", hair: "#2a1d14", skin: "#c69a78" }, rim: "#c8f031" },
-  L2: { look: { shirt: "#d8d6cf", hair: "#15110e", skin: "#a8785a" }, rim: "#e9e9e9" },
-  R1: { look: { shirt: "#6e2626", hair: "#8f6d47", skin: "#c99a76" }, rim: "#e9e9e9" },
-  R2: { look: { shirt: "#1c1e22", hair: "#3b2a1e", skin: "#d2a684" }, rim: "#d64545" },
+  L1: { look: { shirt: "#ecebe6", hair: "#2a1d14", skin: "#c69a78", shorts: "#23262c", shoe: "#c8f031" }, rim: "#c8f031" },
+  L2: { look: { shirt: "#d8d6cf", hair: "#15110e", skin: "#a8785a", shorts: "#23262c", shoe: "#f2f2f0" }, rim: "#e9e9e9" },
+  R1: { look: { shirt: "#6e2626", hair: "#8f6d47", skin: "#c99a76", shorts: "#15161a", shoe: "#f2f2f0" }, rim: "#e9e9e9" },
+  R2: { look: { shirt: "#1c1e22", hair: "#3b2a1e", skin: "#d2a684", shorts: "#15161a", shoe: "#d64545" }, rim: "#d64545" },
 };
 
 // People watching: position (drawing units), the way they face (degrees), and whether they follow the ball.
@@ -540,7 +651,8 @@ function Palm({ x, y, r }: { x: number; y: number; r: number }) {
 
 export function CourtDrawing({ className }: { className?: string }) {
   const players = useRef<Record<PID, SVGGElement | null>>({ L1: null, L2: null, R1: null, R2: null });
-  const swings = useRef<Record<PID, SVGGElement | null>>({ L1: null, L2: null, R1: null, R2: null });
+  const figs = useRef<Record<PID, FigRefs>>({ L1: newFig(), L2: newFig(), R1: newFig(), R2: newFig() });
+  const talkers = useRef<{ root: SVGGElement | null; fig: FigRefs }[]>(TALKERS.map(() => ({ root: null, fig: newFig() })));
   const ball = useRef<SVGGElement | null>(null);
   const ballUp = useRef<SVGGElement | null>(null);
   const ballShadow = useRef<SVGEllipseElement | null>(null);
@@ -573,6 +685,10 @@ export function CourtDrawing({ className }: { className?: string }) {
     let capAt = -99;
     const facing: Record<PID, number> = { L1: 0, L2: 0, R1: 180, R2: 180 };
     const looks = WATCHERS.map((w) => w.face);
+    // Running: smoothed velocity (m/s), stride phase, and the lean that comes with speed.
+    const motion = {} as Record<PID, { prev: V; v: V; phase: number; stride: number }>;
+    for (const p of PIDS) motion[p] = { prev: { ...start[p] }, v: { x: 0, y: 0 }, phase: 0, stride: 0 };
+    const talkFace = TALKERS.map((m) => angleTo(m, GROUPS[m.group]));
 
     const io = new IntersectionObserver(([e]) => (visible = e.isIntersecting));
     if (root.current) io.observe(root.current);
@@ -591,16 +707,18 @@ export function CourtDrawing({ className }: { className?: string }) {
       return { p: { x: lerp(s.a.x, s.b.x, u), y: lerp(s.a.y, s.b.y, u) }, h };
     };
 
-    const swingAngle = (pid: PID, t: number) => {
+    /** Racket angle, bend and dive for a player at time t, from their strokes. */
+    const stroke = (pid: PID, t: number) => {
       for (const s of plan.swings) {
         if (s.pid !== pid) continue;
         const d = t - s.t;
-        if (d < -0.35 || d > 0.5) continue;
-        if (d < 0) return -55 * smooth((d + 0.35) / 0.35);
-        if (d < 0.14) return lerp(-55, 38, d / 0.14);
-        return 38 * (1 - smooth((d - 0.14) / 0.36));
+        if (d < -0.45 || d > 0.6) continue;
+        const [wind, hit] = s.kind === "over" ? [-135, 32] : s.kind === "volley" ? [-30, 22] : [-55, 38];
+        const angle = d < 0 ? wind * smooth((d + 0.45) / 0.45) : d < 0.14 ? lerp(wind, hit, d / 0.14) : hit * (1 - smooth((d - 0.14) / 0.46));
+        const bell = d < 0 ? smooth((d + 0.45) / 0.45) : 1 - smooth(clamp((d - 0.1) / 0.5, 0, 1));
+        return { angle, bend: s.bend * bell, dive: s.kind === "lunge" ? bell : 0 };
       }
-      return 0;
+      return { angle: 0, bend: 0, dive: 0 };
     };
 
     const draw = (now: number) => {
@@ -645,7 +763,27 @@ export function CourtDrawing({ className }: { className?: string }) {
           el.setAttribute("transform", `rotate(${((Math.atan2(dy, dx) * 180) / Math.PI).toFixed(1)} ${(px + (dx / l) * reach).toFixed(2)} ${(py + (dy / l) * reach).toFixed(2)})`);
           el.setAttribute("opacity", Math.max(0.08, 0.34 - l * 0.0011).toFixed(2));
         });
-        swings.current[p]?.setAttribute("transform", `rotate(${swingAngle(p, t).toFixed(1)})`);
+        // Legs: stride with the speed, in the direction they're moving relative to where they face.
+        const m = motion[p];
+        if (dt > 0) {
+          const rv = { x: (pos.x - m.prev.x) / dt, y: (pos.y - m.prev.y) / dt };
+          m.v = { x: lerp(m.v.x, rv.x, 0.25), y: lerp(m.v.y, rv.y, 0.25) };
+        }
+        m.prev = pos;
+        const speed = len(m.v);
+        m.phase += speed * dt * 3.1;
+        m.stride = lerp(m.stride, clamp(speed * 0.8, 0, 3.4), 0.2);
+        const fr = (-facing[p] * Math.PI) / 180;
+        const dir = speed > 0.05 ? norm({ x: m.v.x * Math.cos(fr) - m.v.y * Math.sin(fr), y: m.v.x * Math.sin(fr) + m.v.y * Math.cos(fr) }) : { x: 1, y: 0 };
+        const st = stroke(p, t);
+        const swingStep = Math.sin(m.phase) * m.stride;
+        const spread = 0.35 * st.bend + 1.3 * st.dive; // feet wider when bending low or diving
+        pose(figs.current[p], {
+          fl: { x: FOOT_L.x + dir.x * swingStep + st.dive * 1.2, y: FOOT_L.y + dir.y * swingStep - spread },
+          fr: { x: FOOT_R.x - dir.x * swingStep - st.dive * 0.6, y: FOOT_R.y - dir.y * swingStep + spread },
+          bend: clamp(st.bend + clamp((speed - 3) / 4, 0, 1) * 0.22, 0, 1),
+          swing: st.angle,
+        });
       }
 
       // Ball: its spot on the ground (shadow) and its height (lifted and a touch larger).
@@ -689,6 +827,30 @@ export function CourtDrawing({ className }: { className?: string }) {
         }
         looks[i] += (want - looks[i]) * 0.06;
         watchers.current[i]?.setAttribute("transform", `translate(${w.x} ${w.y}) rotate(${looks[i].toFixed(1)})`);
+      });
+
+      // Groups chatting: one talks with their hands while the others nod; they all turn to look when a point ends.
+      const react = t >= plan.scoreAt - 0.3 && t < plan.scoreAt + 2.4 ? Math.sin(clamp((t - plan.scoreAt + 0.3) / 2.7, 0, 1) * Math.PI) : 0;
+      TALKERS.forEach((m, i) => {
+        const g = GROUPS[m.group];
+        const size = TALKERS.filter((q) => q.group === m.group).length;
+        const idx = TALKERS.filter((q, j) => q.group === m.group && j < i).length;
+        const speaker = Math.floor((t + m.group * 1.3) / 2.8) % size;
+        const talking = speaker === idx;
+        const base = angleTo(m, g);
+        const toCourt = angleTo(m, COURT_CENTRE);
+        const want = base + turn(base, toCourt) * 0.75 * react + (talking ? Math.sin(t * 1.7 + i) * 6 : 0);
+        talkFace[i] += turn(talkFace[i], want) * 0.08;
+        const r = talkers.current[i];
+        const shift = Math.sin(t * 0.9 + i * 2.1) * 0.35; // weight shifting foot to foot
+        r.root?.setAttribute("transform", `translate(${m.x} ${m.y}) rotate(${talkFace[i].toFixed(1)})`);
+        pose(r.fig, {
+          fl: { x: 1.35 + shift * 0.4, y: -1.1 },
+          fr: { x: 1.35 - shift * 0.4, y: 1.1 },
+          bend: talking ? 0.06 + 0.04 * Math.sin(t * 3.1) : 0.02,
+          arm: talking ? -35 + 22 * Math.sin(t * 5.3 + i) : -4 + 3 * Math.sin(t * 0.8 + i),
+          nod: talking ? 0.22 * Math.sin(t * 6.5) : 0.28 * Math.max(0, Math.sin(t * 2.2 + i * 1.7)),
+        });
       });
 
       // Name the shot that won the point, under the scoreboard.
@@ -803,14 +965,7 @@ export function CourtDrawing({ className }: { className?: string }) {
           }}
           transform={`translate(${sx(start[p].x)} ${sy(start[p].y)}) rotate(${TEAM[p] === "L" ? 0 : 180})`}
         >
-          <Person
-            noShadow
-            look={LOOKS[p].look}
-            racket={LOOKS[p].rim}
-            swingRef={(el) => {
-              swings.current[p] = el;
-            }}
-          />
+          <Figure look={LOOKS[p].look} racket={LOOKS[p].rim} r={figs.current[p]} />
         </g>
       ))}
 
@@ -899,6 +1054,21 @@ export function CourtDrawing({ className }: { className?: string }) {
       <circle cx="246" cy="18" r="4.2" fill="url(#gpc-shade)" />
       <circle cx="244.8" cy="17" r="0.8" fill="#7a4b2a" />
       <circle cx="247.4" cy="19.2" r="0.8" fill="#c8f031" opacity="0.85" />
+
+      {/* People standing and chatting */}
+      {TALKERS.map((m, i) => (
+        <g key={`t${i}`}>
+          <ellipse cx={m.x + 1.8} cy={m.y + 2.2} rx="4.6" ry="4.2" fill="#000" opacity="0.4" filter="url(#gpc-soft)" />
+          <g
+            ref={(el: SVGGElement | null) => {
+              talkers.current[i].root = el;
+            }}
+            transform={`translate(${m.x} ${m.y}) rotate(${angleTo(m, GROUPS[m.group]).toFixed(1)})`}
+          >
+            <Figure look={m.look} r={talkers.current[i].fig} />
+          </g>
+        </g>
+      ))}
 
       {/* Spectators */}
       {WATCHERS.map((w, i) => (
