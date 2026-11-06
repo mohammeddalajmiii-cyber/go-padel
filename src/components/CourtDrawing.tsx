@@ -22,6 +22,7 @@ const H = 10 * S;
 const sx = (x: number) => OX + S * x;
 const sy = (y: number) => OY + S * y;
 const NETX = 10;
+const NET_SX = sx(NETX);
 
 type V = { x: number; y: number };
 type Team = "L" | "R";
@@ -555,21 +556,60 @@ function pose(r: FigRefs, o: { fl: V; fr: V; bend: number; swing?: number; arm?:
 
 // Small groups standing and chatting, facing each other.
 type Talker = { x: number; y: number; group: number; look: Look };
-const GROUPS: V[] = [
-  { x: 36, y: 186.5 },
-  { x: 100, y: 15.5 },
-  { x: 286.5, y: 100 },
-];
+const GROUPS: V[] = [{ x: 36, y: 187 }];
 const TALKERS: Talker[] = [
-  { x: 29.5, y: 183.5, group: 0, look: { shirt: "#3d4b3a", hair: "#1a1410", skin: "#a8785a", shorts: "#2a2d33", shoe: "#d9d6cf" } },
-  { x: 42.5, y: 183.5, group: 0, look: { shirt: "#e9e5dc", hair: "#4a3626", skin: "#d2a684", shorts: "#3a4a5e", shoe: "#ffffff" } },
-  { x: 36, y: 192.5, group: 0, look: { shirt: "#7a2f2f", hair: "#120e0b", skin: "#8d5f43", shorts: "#1f2229", shoe: "#c8f031" } },
-  { x: 93, y: 15.5, group: 1, look: { shirt: "#22252b", hair: "#6b4f35", skin: "#c99a76", shorts: "#2f3540", shoe: "#ffffff" } },
-  { x: 107, y: 15.5, group: 1, look: { shirt: "#b8a68a", hair: "#15110e", skin: "#b98a68", shorts: "#2a2d33", shoe: "#e8e8e6" } },
-  { x: 286.5, y: 93, group: 2, look: { shirt: "#4a5a6e", hair: "#2c2018", skin: "#c69a78", shorts: "#22252b", shoe: "#e8e8e6" } },
-  { x: 286.5, y: 107, group: 2, look: { shirt: "#d9d4c8", hair: "#3b2a1e", skin: "#a8785a", shorts: "#3c3a35", shoe: "#ffffff" } },
+  { x: 29.5, y: 187, group: 0, look: { shirt: "#3d4b3a", hair: "#1a1410", skin: "#a8785a", shorts: "#2a2d33", shoe: "#d9d6cf" } },
+  { x: 42.5, y: 187, group: 0, look: { shirt: "#e9e5dc", hair: "#4a3626", skin: "#d2a684", shorts: "#3a4a5e", shoe: "#ffffff" } },
 ];
 const COURT_CENTRE: V = { x: sx(NETX), y: sy(5) };
+
+// ---------- The net ----------
+// Seen with the same slight angle as the ball: anything h metres up is drawn LIFT_X·h right and LIFT_Y·h up.
+const LIFT_X = 2.0;
+const LIFT_Y = -1.8;
+const NET_Y0 = OY - 1.2; // the net runs from post to post, at the side fences
+const NET_Y1 = OY + H + 1.2;
+/** Net height along its length: 0.92 m at the posts, sagging to 0.88 m in the middle. */
+const netTop = (y: number) => {
+  const u = (y - (NET_Y0 + NET_Y1) / 2) / ((NET_Y1 - NET_Y0) / 2);
+  return 0.88 + 0.04 * u * u;
+};
+type NetHit = { t: number; y: number; amp: number; dir: number };
+/** How far the net is pushed sideways (drawing units) at a spot, height h (m), time t. */
+function netPush(hits: NetHit[], y: number, h: number, t: number) {
+  let d = 0;
+  for (const e of hits) {
+    const dt = t - e.t;
+    if (dt < 0 || dt > 1.8) continue;
+    const along = Math.exp(-(((y - e.y) / 17) ** 2)); // the bulge spreads about 1.5 m either side
+    d += e.amp * e.dir * Math.exp(-3.4 * dt) * Math.sin(16 * dt + 0.25) * along;
+  }
+  // tied at the bottom, most give in the middle of the mesh, the top tape is tighter
+  return d * Math.sin((Math.PI * Math.min(h, 0.9)) / 1.05);
+}
+const NET_SAMPLES = Array.from({ length: 61 }, (_, i) => NET_Y0 + ((NET_Y1 - NET_Y0) * i) / 60);
+const netPoint = (hits: NetHit[], y: number, h: number, t: number): V => ({
+  x: NET_SX + LIFT_X * h + netPush(hits, y, h, t),
+  y: y + LIFT_Y * h,
+});
+/** The mesh (vertical and horizontal cords), the body outline and the top tape, as SVG paths. */
+function netShape(hits: NetHit[], t: number) {
+  const f = (v: V) => `${v.x.toFixed(2)} ${v.y.toFixed(2)}`;
+  const rows = [0.15, 0.3, 0.45, 0.6, 0.75];
+  let mesh = "";
+  for (let i = 0; i < NET_SAMPLES.length; i++) {
+    const y = NET_SAMPLES[i];
+    const top = netTop(y);
+    mesh += `M${f(netPoint(hits, y, 0.05, t))}L${f(netPoint(hits, y, top * 0.5, t))}L${f(netPoint(hits, y, top - 0.04, t))}`;
+  }
+  for (const h of rows) mesh += "M" + NET_SAMPLES.map((y) => f(netPoint(hits, y, h * netTop(y), t))).join("L");
+  const topLine = NET_SAMPLES.map((y) => netPoint(hits, y, netTop(y), t));
+  const body =
+    "M" + NET_SAMPLES.map((y) => f(netPoint(hits, y, 0.05, t))).join("L") + "L" + [...topLine].reverse().map(f).join("L") + "Z";
+  const tape = "M" + topLine.map(f).join("L");
+  return { mesh, body, tape };
+}
+const NET_STILL = netShape([], 0);
 
 // Visitors: people who wander in, find a spot by the glass, watch, get bored, and leave.
 // Spots are where they stand (drawing units) with the way that faces the court and the way in/out.
@@ -577,23 +617,16 @@ type Spot = { x: number; y: number; face: number; door: V };
 const SPOTS: Spot[] = [
   { x: 52, y: 29, face: 90, door: { x: 28, y: -12 } },
   { x: 63.5, y: 30, face: 90, door: { x: 28, y: -12 } },
-  { x: 21, y: 72, face: 0, door: { x: -12, y: 58 } },
-  { x: 21, y: 128, face: 0, door: { x: -12, y: 142 } },
   { x: 281, y: 150, face: 180, door: { x: 312, y: 166 } },
-  { x: 281, y: 54, face: 180, door: { x: 312, y: 44 } },
 ];
 // Pairs of spots side by side: friends sometimes arrive together.
 const NEXT_TO: Record<number, number> = { 0: 1, 1: 0 };
 const VISITORS: Look[] = [
   { shirt: "#2f3a4a", hair: "#15110e", skin: "#a8785a", shorts: "#22252b", shoe: "#e8e8e6" },
   { shirt: "#e4e0d6", hair: "#6b4f35", skin: "#d2a684", shorts: "#3a4a5e", shoe: "#ffffff" },
-  { shirt: "#5b3a5e", hair: "#1a1410", skin: "#8d5f43", shorts: "#1f2229", shoe: "#d9d6cf" },
   { shirt: "#c46b3c", hair: "#2c2018", skin: "#c99a76", shorts: "#2a2d33", shoe: "#ffffff" },
   { shirt: "#3e5f55", hair: "#9c7b52", skin: "#d2a684", shorts: "#3c3a35", shoe: "#e8e8e6" },
   { shirt: "#1f2125", hair: "#120e0b", skin: "#b98a68", shorts: "#1b1d21", shoe: "#c8f031" },
-  { shirt: "#a9b4c2", hair: "#3b2a1e", skin: "#a8785a", shorts: "#2f3540", shoe: "#ffffff" },
-  { shirt: "#8a6d3b", hair: "#15110e", skin: "#c69a78", shorts: "#22252b", shoe: "#d9d6cf" },
-  { shirt: "#f0ede6", hair: "#4a3626", skin: "#8d5f43", shorts: "#3a4a5e", shoe: "#e8e8e6" },
 ];
 const WALK = 16; // drawing units per second (about 1.3 m/s)
 type Visit = {
@@ -608,11 +641,11 @@ type Visit = {
   face: number;
   phaseLeg: number;
 };
-/** Who's there when the page opens: three people already watching. */
+/** Who's there when the page opens: one person already watching. */
 const firstVisits = (): Visit[] =>
   VISITORS.map((_, i) => {
     const sp = SPOTS[i];
-    if (i < 3) return { phase: "watch", spot: i, pos: { x: sp.x, y: sp.y }, from: { x: sp.x, y: sp.y }, to: { x: sp.x, y: sp.y }, t0: 0, t1: 0, until: 9 + i * 7, face: sp.face, phaseLeg: 0 };
+    if (i < 1) return { phase: "watch", spot: i, pos: { x: sp.x, y: sp.y }, from: { x: sp.x, y: sp.y }, to: { x: sp.x, y: sp.y }, t0: 0, t1: 0, until: 9 + i * 7, face: sp.face, phaseLeg: 0 };
     return { phase: "away", spot: -1, pos: { x: -40, y: -40 }, from: { x: -40, y: -40 }, to: { x: -40, y: -40 }, t0: 0, t1: 0, until: 3 + i * 2.5, face: 0, phaseLeg: 0 };
   });
 const angleTo = (from: V, to: V) => (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
@@ -628,11 +661,8 @@ const LOOKS: Record<PID, { look: Look; rim: string }> = {
 // People watching: position (drawing units), the way they face (degrees), and whether they follow the ball.
 type Watcher = { x: number; y: number; face: number; look: Look; seated?: boolean; follows: number };
 const WATCHERS: Watcher[] = [
-  { x: 74, y: 182.5, face: -90, seated: true, follows: 0.7, look: { shirt: "#3a4a5e", hair: "#1a1410", skin: "#b98a68", legs: "#1f2229" } },
   { x: 96, y: 182.5, face: -90, seated: true, follows: 0.6, look: { shirt: "#c9c2b0", hair: "#2c2018", skin: "#c99a76", legs: "#3c3a35" } },
-  { x: 118, y: 182.5, face: -90, seated: true, follows: 0.75, look: { shirt: "#5a5f3d", hair: "#120e0b", skin: "#8d5f43", legs: "#22252b" } },
   { x: 182, y: 182.5, face: -90, seated: true, follows: 0.7, look: { shirt: "#8a2f3a", hair: "#3b2a1e", skin: "#d2a684", legs: "#1f2229" } },
-  { x: 204, y: 182.5, face: -90, seated: true, follows: 0.55, look: { shirt: "#e6e3dc", hair: "#1a1410", skin: "#a8785a", legs: "#2f3540" } },
   { x: 226, y: 182.5, face: -90, seated: true, follows: 0.7, look: { shirt: "#2d3036", hair: "#6b4f35", skin: "#c69a78", legs: "#1b1d21" } },
   { x: 236.5, y: 18, face: 0, seated: true, follows: 0.15, look: { shirt: "#40464f", hair: "#1a1410", skin: "#b98a68", legs: "#20232a" } },
   { x: 255.5, y: 18, face: 180, seated: true, follows: 0.35, look: { shirt: "#b8a68a", hair: "#3b2a1e", skin: "#c99a76", legs: "#33302b" } },
@@ -640,7 +670,6 @@ const WATCHERS: Watcher[] = [
 
 // Steel posts every 2 m; glass for 4 m from each back wall, mesh between, doors by the net.
 const GLASS_RETURN = 4 * S;
-const NET_SX = sx(NETX);
 const DOORS: [number, number][] = [
   [NET_SX - 22, NET_SX - 10],
   [NET_SX + 10, NET_SX + 22],
@@ -705,6 +734,9 @@ export function CourtDrawing({ className }: { className?: string }) {
   const bounceRing = useRef<SVGCircleElement | null>(null);
   const glassFlash = useRef<SVGEllipseElement | null>(null);
   const netFlash = useRef<SVGLineElement | null>(null);
+  const netMesh = useRef<SVGPathElement | null>(null);
+  const netBody = useRef<SVGPathElement | null>(null);
+  const netTape = useRef<SVGPathElement | null>(null);
   const sideFlash = useRef<SVGEllipseElement | null>(null);
   const caption = useRef<SVGTextElement | null>(null);
   const watchers = useRef<(SVGGElement | null)[]>([]);
@@ -737,8 +769,26 @@ export function CourtDrawing({ className }: { className?: string }) {
     const motion = {} as Record<PID, { prev: V; v: V; phase: number; stride: number }>;
     for (const p of PIDS) motion[p] = { prev: { ...start[p] }, v: { x: 0, y: 0 }, phase: 0, stride: 0 };
     const talkFace = TALKERS.map((m) => angleTo(m, GROUPS[m.group]));
+    const netHitsFor = new WeakMap<Plan, NetHit[]>();
+    const netHits = (pl: Plan): NetHit[] => {
+      const known = netHitsFor.get(pl);
+      if (known) return known;
+      const out: NetHit[] = [];
+      for (const fl of pl.flashes) if (fl.kind === "net") out.push({ t: fl.t, y: sy(fl.p.y), amp: 3.2, dir: fl.p.x < NETX ? 1 : -1 });
+      for (const sg of pl.segs) {
+        if ((sg.a.x - NETX) * (sg.b.x - NETX) >= 0) continue;
+        const u = (NETX - sg.a.x) / (sg.b.x - sg.a.x);
+        const h = lerp(sg.h0, sg.h1, u) + 4 * Math.max(0, sg.peak - Math.max(sg.h0, sg.h1)) * u * (1 - u);
+        const y = lerp(sg.a.y, sg.b.y, u);
+        // A ball that only just clears the tape brushes it.
+        if (h < 1.12 && h > 0.86) out.push({ t: lerp(sg.t0, sg.t1, u), y: sy(y), amp: 0.9 * (1.12 - h) / 0.26 + 0.25, dir: sg.b.x > sg.a.x ? 1 : -1 });
+      }
+      netHitsFor.set(pl, out);
+      return out;
+    };
+    let netMoving = false;
     const visits = firstVisits();
-    const spotFreeAt = SPOTS.map((_, i) => (i < 3 ? Infinity : 4 + i * 3)); // when each empty spot can take someone new
+    const spotFreeAt = SPOTS.map((_, i) => (i < 1 ? Infinity : 8 + i * 6)); // when each empty spot can take someone new
     const walkTo = (v: Visit, to: V, now: number) => {
       v.from = { ...v.pos };
       v.to = to;
@@ -845,7 +895,7 @@ export function CourtDrawing({ className }: { className?: string }) {
       // Ball: its spot on the ground (shadow) and its height (lifted and a touch larger).
       // The shadow marks the spot on the ground; the ball is lifted above it by its height,
       // joined by a thin dotted line when it's high, with a short trail showing where it's going.
-      const lift = { x: b.h * 1.1, y: -b.h * 2.2 };
+      const lift = { x: b.h * LIFT_X, y: b.h * LIFT_Y };
       if (ball.current) {
         ball.current.setAttribute("opacity", ballOn ? "1" : "0");
         ball.current.setAttribute("transform", `translate(${sx(b.p.x).toFixed(2)} ${sy(b.p.y).toFixed(2)})`);
@@ -895,6 +945,17 @@ export function CourtDrawing({ className }: { className?: string }) {
           bounceRing.current.setAttribute("r", (1.4 + ring * 4.5).toFixed(2));
           bounceRing.current.setAttribute("opacity", (0.75 * (1 - ring)).toFixed(2));
         } else bounceRing.current.setAttribute("opacity", "0");
+      }
+
+      // The net bulges where the ball hits it and wobbles back; a ball clipping the tape makes it tremble.
+      const hits = netHits(plan);
+      const active = hits.some((e) => t - e.t >= 0 && t - e.t <= 1.8);
+      if (active || netMoving) {
+        const n = active ? netShape(hits, t) : NET_STILL;
+        netMesh.current?.setAttribute("d", n.mesh);
+        netBody.current?.setAttribute("d", n.body);
+        netTape.current?.setAttribute("d", n.tape);
+        netMoving = active;
       }
 
       // Glass and net flashes where the ball hits.
@@ -1139,14 +1200,22 @@ export function CourtDrawing({ className }: { className?: string }) {
         </g>
       ))}
 
-      {/* Net */}
-      <line x1={NET_SX + 1.6} y1={OY - 1} x2={NET_SX + 1.6} y2={OY + H + 1} stroke="#000" strokeWidth="2.2" opacity="0.28" filter="url(#gpc-soft)" />
-      <line x1={NET_SX - 1.8} y1={OY - 1} x2={NET_SX - 1.8} y2={OY + H + 1} stroke="#000" strokeWidth="2" opacity="0.16" filter="url(#gpc-soft)" />
-      <line x1={NET_SX} y1={OY - 1.5} x2={NET_SX} y2={OY + H + 1.5} stroke="#0d0d0d" strokeWidth="1.4" opacity="0.75" />
-      <line x1={NET_SX} y1={OY - 1.5} x2={NET_SX} y2={OY + H + 1.5} stroke="#f5f5f5" strokeWidth="0.55" />
-      <line ref={netFlash} x1={NET_SX} y1={OY} x2={NET_SX} y2={OY + H} stroke="#ffffff" strokeWidth="2.4" opacity="0" filter="url(#gpc-soft)" />
-      <rect x={NET_SX - 1.3} y={OY - 3.2} width="2.6" height="2.6" rx="0.4" fill="#1a1a1a" />
-      <rect x={NET_SX - 1.3} y={OY + H + 0.6} width="2.6" height="2.6" rx="0.4" fill="#1a1a1a" />
+      {/* Net: shadows on the turf, posts, the mesh, a centre strap and the white top tape */}
+      <line x1={NET_SX + 1.6} y1={OY - 1} x2={NET_SX + 1.6} y2={OY + H + 1} stroke="#000" strokeWidth="2.6" opacity="0.26" filter="url(#gpc-soft)" />
+      <line x1={NET_SX - 1.8} y1={OY - 1} x2={NET_SX - 1.8} y2={OY + H + 1} stroke="#000" strokeWidth="2.2" opacity="0.14" filter="url(#gpc-soft)" />
+      <line x1={NET_SX} y1={NET_Y0} x2={NET_SX} y2={NET_Y1} stroke="#0b0b0b" strokeWidth="0.5" opacity="0.8" />
+      <path ref={netBody} d={NET_STILL.body} fill="#06080c" opacity="0.38" />
+      <path ref={netMesh} d={NET_STILL.mesh} fill="none" stroke="#d6dbe4" strokeWidth="0.14" opacity="0.38" />
+      <line x1={NET_SX + LIFT_X * 0.05} y1={sy(5) + LIFT_Y * 0.05} x2={NET_SX + LIFT_X * 0.88} y2={sy(5) + LIFT_Y * 0.88} stroke="#e9e9e9" strokeWidth="0.5" opacity="0.85" />
+      <path ref={netTape} d={NET_STILL.tape} fill="none" stroke="#f5f5f5" strokeWidth="0.75" strokeLinejoin="round" />
+      {[NET_Y0, NET_Y1].map((y) => (
+        <g key={`np${y}`}>
+          <line x1={NET_SX} y1={y} x2={NET_SX + LIFT_X * 0.95} y2={y + LIFT_Y * 0.95} stroke="#16181c" strokeWidth="1.3" strokeLinecap="round" />
+          <circle cx={NET_SX + LIFT_X * 0.95} cy={y + LIFT_Y * 0.95} r="0.75" fill="#2a2d33" />
+          <rect x={NET_SX - 1} y={y - 1} width="2" height="2" rx="0.3" fill="#111" />
+        </g>
+      ))}
+      <line ref={netFlash} x1={NET_SX + 0.5} y1={OY} x2={NET_SX + 0.5} y2={OY + H} stroke="#ffffff" strokeWidth="2.4" opacity="0" filter="url(#gpc-soft)" />
 
       {/* Players */}
       {PIDS.map((p) => (
@@ -1210,7 +1279,7 @@ export function CourtDrawing({ className }: { className?: string }) {
       <g ref={ball} transform={`translate(${sx(serverHand.x)} ${sy(serverHand.y)})`} opacity="0">
         <ellipse ref={ballShadow} rx="1.5" ry="1.1" fill="#000" opacity="0.5" filter="url(#gpc-soft)" />
         <line ref={heightLine} x1="0" y1="0" x2="0" y2="0" stroke="#ffffff" strokeWidth="0.3" strokeDasharray="0.7 0.7" opacity="0" />
-        <g ref={ballUp} transform="translate(1.1 -2.2)">
+        <g ref={ballUp} transform={`translate(${LIFT_X} ${LIFT_Y})`}>
           <circle r="2.5" fill="#c8f031" opacity="0.18" />
           <circle r="1.65" fill="#dcf53f" stroke="#3f4a0e" strokeWidth="0.28" />
           <path d="M-1.2 -1 Q -0.15 0 -1.2 1" fill="none" stroke="#ffffff" strokeWidth="0.3" opacity="0.85" />
