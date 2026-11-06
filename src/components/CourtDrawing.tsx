@@ -17,6 +17,8 @@ export function CourtDrawing({ className }: { className?: string }) {
       <line x1="110" y1="6" x2="110" y2="114" stroke={line} strokeWidth="2.2" />
       <circle cx="110" cy="6" r="1.8" fill={line} />
       <circle cx="110" cy="114" r="1.8" fill={line} />
+      {/* the ball */}
+      <circle cx="146" cy="36" r="3.2" fill="var(--color-lime)" />
       {/* glass walls: back walls plus 4 m returns at each corner */}
       <g stroke="var(--color-glass)" strokeWidth="3" strokeLinecap="round" opacity="0.55">
         <path d="M50 6 H6 V114 H50" />

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CourtDrawing } from "@/components/CourtDrawing";
 import { notFound } from "next/navigation";
 import { availability } from "@/lib/bookings";
 import { durationLabel, fill, isLang, num, t } from "@/lib/i18n";
@@ -82,7 +83,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
           </div>
 
           <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-night/75 p-5 backdrop-blur md:justify-self-end">
-            <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-chalk/70 rtl:tracking-normal">{h.nextFree}</h2>
+            {/* The court from above */}
+            <CourtDrawing className="w-full" />
+            <h2 className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-chalk/70 rtl:tracking-normal">{h.nextFree}</h2>
             {free.length ? (
               <ul className="mt-3 grid grid-cols-3 gap-2">
                 {free.map((x) => (
