@@ -109,9 +109,9 @@ export function Schedule() {
         </div>
 
         <div className="mt-5 flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="text-2xl font-semibold">
+          <h1 className="gp-display text-3xl md:text-4xl">
             {formatDate(data.date, "en")}
-            {isToday && <span className="ms-2 text-base font-normal text-muted">today</span>}
+            {isToday && <span className="ms-3 rounded-full bg-lime px-3 py-1 align-middle [font-family:Inter,sans-serif] [font-stretch:normal] text-sm font-bold not-italic normal-case text-night">Today</span>}
           </h1>
           <p className="text-sm text-muted">
             {live.length} booking{live.length === 1 ? "" : "s"} · {egp(due)} still to collect
@@ -124,7 +124,7 @@ export function Schedule() {
             <span className="font-medium">{notice.text}</span>
             <span className="flex gap-2">
               {notice.whatsapp && (
-                <a href={notice.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-chip bg-ok px-3 py-1.5 text-sm font-semibold text-white">
+                <a href={notice.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-chip bg-ok px-3 py-1.5 text-sm font-semibold text-night">
                   Send WhatsApp
                 </a>
               )}
@@ -146,7 +146,7 @@ export function Schedule() {
             return (
               <li
                 key={m}
-                className={`grid grid-cols-[92px_1fr] border-b border-line last:border-b-0 ${now ? "bg-ball/25" : ""}`}
+                className={`grid grid-cols-[92px_1fr] border-b border-line last:border-b-0 ${now ? "bg-ball/10" : ""}`}
                 style={{ minHeight: `${span * 56}px` }}
               >
                 <div className={`border-e border-line px-3 py-2 text-sm ${past ? "text-muted/60" : "text-muted"}`}>

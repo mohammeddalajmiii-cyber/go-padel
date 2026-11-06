@@ -143,6 +143,44 @@ html[lang="ar"] .gp-display {
   background: url("/court-blue.jpg") center 70% / cover no-repeat;
 }
 
+/* ---------- Front desk: the same dark look ----------
+   The front desk screens use the original color names (court, ink, paper…).
+   Inside .gp-admin they point at the dark palette, so every screen follows. */
+.gp-admin {
+  --color-court: #c8f031;        /* main buttons, selected tabs, links → lime */
+  --color-court-deep: #e2ff7a;   /* hover on main buttons */
+  --color-court-line: #0a0a0a;   /* text on main buttons */
+  --color-ball: #c8f031;
+  --color-ball-deep: #e2ff7a;
+  --color-ink: #f5f5f5;          /* text */
+  --color-muted: #a3a3a3;
+  --color-paper: #0a0a0a;        /* page and input background */
+  --color-white: #161616;        /* cards and panels */
+  --color-line: #333333;
+  --color-glass: #222222;
+  --color-ok: #3ecf8e;
+  --color-ok-soft: #0f2e20;
+  --color-warn: #ffc670;
+  --color-warn-soft: #3a2a0d;
+  --color-bad: #ff7a6e;
+  --color-bad-soft: #3b1714;
+  --radius-chip: 12px;
+  --radius-panel: 22px;
+
+  background: var(--color-paper);
+  color: var(--color-ink);
+  color-scheme: dark;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.gp-login {
+  background:
+    linear-gradient(rgba(10, 10, 10, 0.8), rgba(10, 10, 10, 0.92)),
+    url("/court-blue.jpg") center / cover no-repeat;
+}
+.gp-admin :focus-visible {
+  outline-color: var(--color-lime);
+}
+
 /* Hide scrollbars on the day picker row but keep it scrollable */
 .no-scrollbar {
   scrollbar-width: none;

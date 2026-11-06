@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "../globals.css";
-import { FontLinks } from "@/components/FontLinks";
+import { SiteFontLinks } from "@/components/SiteFontLinks";
 
 export const metadata: Metadata = {
   title: { default: "Front desk · Go Padel", template: "%s · Go Padel front desk" },
@@ -11,9 +11,10 @@ export default function AdminRootLayout({ children }: { children: React.ReactNod
   return (
     <html lang="en" dir="ltr">
       <head>
-        <FontLinks />
+        <SiteFontLinks />
+        <meta name="theme-color" content="#0a0a0a" />
       </head>
-      <body className="min-h-dvh">{children}</body>
+      <body className="gp-admin min-h-dvh">{children}</body>
     </html>
   );
 }

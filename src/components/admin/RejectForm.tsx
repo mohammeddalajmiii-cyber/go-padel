@@ -38,7 +38,7 @@ export function RejectForm({ onReject, onCancel, busy }: { onReject: (reason: st
           type="button"
           disabled={busy || !reason}
           onClick={() => onReject(reason)}
-          className="rounded-chip bg-bad px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="rounded-chip bg-bad px-3 py-2 text-sm font-semibold text-night disabled:opacity-50"
         >
           Reject payment
         </button>

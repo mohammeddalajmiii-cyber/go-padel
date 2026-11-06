@@ -47,7 +47,7 @@ export function Reports() {
   return (
     <div>
       <div className="flex flex-wrap items-end gap-3">
-        <h1 className="me-auto text-2xl font-semibold">Reports</h1>
+        <h1 className="gp-display me-auto text-4xl">Reports</h1>
         {PRESETS.map((p) => (
           <button
             key={p.days}
@@ -82,7 +82,7 @@ export function Reports() {
         ].map((x) => (
           <div key={x.k} className="bg-white p-5">
             <dt className="text-sm text-muted">{x.k}</dt>
-            <dd className="mt-1 text-2xl font-semibold">{x.v}</dd>
+            <dd className="gp-figure mt-1 text-3xl">{x.v}</dd>
           </div>
         ))}
       </dl>

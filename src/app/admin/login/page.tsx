@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Logo } from "@/components/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,12 +34,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-dvh place-items-center bg-court-deep px-4">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-panel bg-white p-7">
-        <div className="flex items-center gap-2 text-lg font-semibold">
-          <span aria-hidden className="inline-block size-4 rounded-full bg-ball" />
-          Go Padel front desk
-        </div>
+    <div className="gp-login grid min-h-dvh place-items-center px-4">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-panel border border-edge bg-white p-7">
+        <Logo size={44} />
+        <h1 className="gp-display mt-6 text-3xl">Front desk</h1>
         <label className="mt-6 block">
           <span className="text-sm font-medium">Password</span>
           <input
@@ -54,7 +53,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={busy || !password}
-          className="mt-5 w-full rounded-chip bg-court px-5 py-3 font-semibold text-court-line hover:bg-court-deep disabled:opacity-50"
+          className="mt-5 w-full rounded-full bg-court px-5 py-3.5 font-bold text-court-line hover:bg-court-deep disabled:opacity-50"
         >
           {busy ? "Signing in…" : "Sign in"}
         </button>

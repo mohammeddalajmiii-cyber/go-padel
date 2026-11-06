@@ -71,7 +71,7 @@ export function SettingsForm() {
 
   return (
     <form onSubmit={save} className="max-w-2xl space-y-8">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+      <h1 className="gp-display text-4xl">Settings</h1>
 
       <section className="rounded-panel border border-line bg-white p-6">
         <h2 className="font-semibold">InstaPay</h2>

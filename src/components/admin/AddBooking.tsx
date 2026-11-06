@@ -57,7 +57,7 @@ export function AddBooking(props: {
   const tab = (on: boolean) => `rounded-chip px-3 py-2 text-sm font-medium ${on ? "bg-court text-court-line" : "border border-line"}`;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-4" onClick={props.onClose} role="presentation">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={props.onClose} role="presentation">
       <form
         onSubmit={save}
         onClick={(e) => e.stopPropagation()}

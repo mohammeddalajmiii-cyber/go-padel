@@ -48,7 +48,7 @@ export function BookingPanel({
   const btn = "rounded-chip px-3 py-2.5 text-sm font-semibold disabled:opacity-50";
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-ink/40" onClick={onClose} role="presentation">
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/70" onClick={onClose} role="presentation">
       <div
         role="dialog"
         aria-modal="true"
@@ -119,7 +119,7 @@ export function BookingPanel({
               <RejectForm busy={busy} onCancel={() => setRejecting(false)} onReject={(reason) => run({ action: "reject", reason }, `Payment rejected for ${b.customer_name}`, true)} />
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                <button type="button" disabled={busy} onClick={() => run({ action: "confirm" }, `Booking confirmed for ${b.customer_name}`)} className={`${btn} bg-ok text-white`}>
+                <button type="button" disabled={busy} onClick={() => run({ action: "confirm" }, `Booking confirmed for ${b.customer_name}`)} className={`${btn} bg-ok text-night`}>
                   Confirm payment
                 </button>
                 <button type="button" disabled={busy} onClick={() => setRejecting(true)} className={`${btn} border border-line`}>
@@ -179,7 +179,7 @@ export function BookingPanel({
               <div className="rounded-chip bg-bad-soft p-3 text-sm text-bad">
                 <p>{isBlock ? "Remove this block and free the time?" : "Cancel this booking? The time becomes free again. Customer bookings normally can't be cancelled."}</p>
                 <div className="mt-3 flex gap-2">
-                  <button type="button" disabled={busy} onClick={() => run({ action: "cancel" }, isBlock ? "Blocked time removed" : "Booking cancelled", true)} className={`${btn} bg-bad text-white`}>
+                  <button type="button" disabled={busy} onClick={() => run({ action: "cancel" }, isBlock ? "Blocked time removed" : "Booking cancelled", true)} className={`${btn} bg-bad text-night`}>
                     {isBlock ? "Remove block" : "Cancel booking"}
                   </button>
                   <button type="button" onClick={() => setCancelling(false)} className={`${btn} text-ink`}>

@@ -73,7 +73,7 @@ export function ReviewList({
                     type="button"
                     disabled={busy === b.id}
                     onClick={() => run(b, { action: "confirm" }, `Booking confirmed for ${b.customer_name}`)}
-                    className="rounded-chip bg-ok px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    className="rounded-chip bg-ok px-3 py-2 text-sm font-semibold text-night disabled:opacity-50"
                   >
                     Confirm
                   </button>
