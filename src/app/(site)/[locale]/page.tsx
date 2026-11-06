@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { availability } from "@/lib/bookings";
 import { durationLabel, fill, isLang, num, t } from "@/lib/i18n";
-import { DURATIONS, priceFor } from "@/lib/pricing";
+import { priceFor } from "@/lib/pricing";
 import { getSettings } from "@/lib/settings";
 import { addDays, businessNow, formatTime } from "@/lib/time";
 
@@ -138,7 +138,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             <div className="flex flex-col gap-4 rounded-3xl border border-edge bg-surface p-7">
               <span className="text-sm font-bold uppercase tracking-[0.14em] text-dim rtl:tracking-normal">{h.longerTitle}</span>
               <dl className="divide-y divide-edge">
-                {DURATIONS.filter((m) => m > 60).map((m) => (
+                {[90, 120, 180, 240].map((m) => (
                   <div key={m} className="flex items-baseline justify-between gap-4 py-2">
                     <dt className="font-semibold">{durationLabel(m, lang)}</dt>
                     <dd className="gp-figure text-xl">

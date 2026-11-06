@@ -1,9 +1,17 @@
 // Booking lengths and how they're priced. Safe to use on the server and in the browser.
 
-/** Lengths a booking can be, in minutes: 30 min, 1 h, 1½ h, 2 h, 3 h, 4 h. */
-export const DURATIONS = [30, 60, 90, 120, 180, 240] as const;
+/** Shortest and longest booking, and the step the − / + buttons move by (minutes). */
+export const MIN_DURATION = 30;
+export const MAX_DURATION = 240;
+export const DURATION_STEP = 30;
 
-export const isDuration = (d: number): boolean => (DURATIONS as readonly number[]).includes(d);
+/** Every length a booking can be: 30 min, 1 h, 1½ h … 4 h. */
+export const DURATIONS: number[] = Array.from(
+  { length: (MAX_DURATION - MIN_DURATION) / DURATION_STEP + 1 },
+  (_, i) => MIN_DURATION + i * DURATION_STEP,
+);
+
+export const isDuration = (d: number): boolean => DURATIONS.includes(d);
 
 export type PriceTable = { price_30: number; price_60: number; deposit_30: number; deposit_60: number };
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { durationLabel, fill, num, t, type Lang } from "@/lib/i18n";
 import { addDays, coveredSlots, fitsHours, formatDate, formatTime, type Hours } from "@/lib/time";
 import { normalizePhone } from "@/lib/phone";
-import { DURATIONS, priceFor, type PriceTable } from "@/lib/pricing";
+import { DURATIONS, DURATION_STEP, MAX_DURATION, MIN_DURATION, priceFor, type PriceTable } from "@/lib/pricing";
 
 type Slot = { start: number; taken: boolean; past: boolean };
 type Duration = number;
@@ -80,6 +80,14 @@ export function BookingFlow(props: {
   const visible = (slots ?? []).filter((s) => !s.past && fitsHours(hours, s.start, duration));
   const anyFree = visible.some((s) => canStart(s.start, duration));
 
+  // − / + : half an hour at a time, 30 minutes to 4 hours. If the longer game no longer
+  // fits at the chosen time, the time is cleared so they pick again.
+  function changeLength(delta: number) {
+    const next = Math.min(MAX_DURATION, Math.max(MIN_DURATION, duration + delta));
+    setDuration(next);
+    if (start !== null && slots && !canStart(start, next)) setStart(null);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const next: typeof errors = {};
@@ -149,31 +157,35 @@ export function BookingFlow(props: {
       {/* Length */}
       <section>
         <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-dim rtl:text-sm rtl:tracking-normal">{b.length}</h2>
-        <div className="mt-3 grid max-w-xl grid-cols-2 gap-2 sm:grid-cols-3" role="radiogroup" aria-label={b.length}>
-          {DURATIONS.map((dur) => {
-            const on = dur === duration;
-            return (
-              <button
-                key={dur}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={() => {
-                  setDuration(dur);
-                  // A longer game might not fit at the chosen time: let them pick the time again.
-                  if (start !== null && slots && !canStart(start, dur)) setStart(null);
-                }}
-                className={`rounded-2xl border px-4 py-3.5 text-start ${
-                  on ? "border-lime bg-lime text-night" : "border-edge hover:border-chalk"
-                }`}
-              >
-                <span className="block font-semibold">{durationLabel(dur, lang)}</span>
-                <span className={`block text-sm ${on ? "text-night/70" : "text-dim"}`}>
-                  {num(cost(dur).total, lang)} {d.home.egp}
-                </span>
-              </button>
-            );
-          })}
+        <div className="mt-3 flex max-w-md items-center gap-2 rounded-2xl border border-edge bg-surface p-2">
+          <button
+            type="button"
+            onClick={() => changeLength(-DURATION_STEP)}
+            disabled={duration <= MIN_DURATION}
+            aria-label={b.shorter}
+            className="grid size-14 shrink-0 place-items-center rounded-xl bg-raised hover:bg-edge disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden>
+              <path d="M5 12h14" />
+            </svg>
+          </button>
+          <div className="min-w-0 flex-1 text-center" aria-live="polite">
+            <span className="block text-xl font-bold">{durationLabel(duration, lang)}</span>
+            <span className="block text-sm text-dim">
+              {num(cost(duration).total, lang)} {d.home.egp}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => changeLength(DURATION_STEP)}
+            disabled={duration >= MAX_DURATION}
+            aria-label={b.longer}
+            className="grid size-14 shrink-0 place-items-center rounded-xl bg-lime text-night hover:bg-lime-hi disabled:cursor-not-allowed disabled:bg-raised disabled:text-dim disabled:opacity-35"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden>
+              <path d="M5 12h14M12 5v14" />
+            </svg>
+          </button>
         </div>
       </section>
 

@@ -50,6 +50,8 @@ const en = {
     today: "Today",
     tomorrow: "Tomorrow",
     length: "How long?",
+    shorter: "Shorter by half an hour",
+    longer: "Longer by half an hour",
     time: "Start time",
     loading: "Loading times…",
     noTimes: "No free times for this length on this day. Try another day or a shorter length.",
@@ -168,6 +170,8 @@ const ar: Dict = {
     today: "النهاردة",
     tomorrow: "بكرة",
     length: "المدة",
+    shorter: "أقل بنص ساعة",
+    longer: "أكتر بنص ساعة",
     time: "وقت البداية",
     loading: "بنحمّل المواعيد…",
     noTimes: "مفيش مواعيد متاحة للمدة دي في اليوم ده. جرب يوم تاني أو مدة أقصر.",
@@ -254,7 +258,10 @@ export function num(n: number, lang: Lang): string {
 /** A booking length in words: "1½ hours" / "ساعة ونص". */
 export function durationLabel(minutes: number, lang: Lang): string {
   if (lang === "ar") {
-    const ar: Record<number, string> = { 30: "٣٠ دقيقة", 60: "ساعة", 90: "ساعة ونص", 120: "ساعتين", 180: "٣ ساعات", 240: "٤ ساعات" };
+    const ar: Record<number, string> = {
+      30: "٣٠ دقيقة", 60: "ساعة", 90: "ساعة ونص", 120: "ساعتين", 150: "ساعتين ونص",
+      180: "٣ ساعات", 210: "٣ ساعات ونص", 240: "٤ ساعات",
+    };
     return ar[minutes] ?? `${num(minutes, lang)} دقيقة`;
   }
   if (minutes < 60) return `${minutes} min`;

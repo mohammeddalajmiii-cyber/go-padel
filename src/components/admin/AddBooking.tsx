@@ -75,7 +75,7 @@ export function AddBooking(props: {
         <p className="mt-1 text-sm text-muted">{formatDate(props.date, "en")}</p>
 
         <div className="mt-5 flex gap-2">
-          <button type="button" className={tab(kind === "manual")} onClick={() => { setKind("manual"); if (!(DURATIONS as readonly number[]).includes(duration)) setDuration(60); }}>
+          <button type="button" className={tab(kind === "manual")} onClick={() => { setKind("manual"); if (!DURATIONS.includes(duration)) setDuration(60); }}>
             Walk-in or phone booking
           </button>
           <button type="button" className={tab(kind === "block")} onClick={() => setKind("block")}>

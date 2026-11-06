@@ -16,7 +16,7 @@ Built with Next.js, Tailwind CSS and PostgreSQL (Neon). Hosted on Vercel.
 | Price | 200 EGP | 400 EGP |
 | Deposit by InstaPay | 50 EGP | 100 EGP |
 
-- Players can book 30 minutes, 1 hour, 1½, 2, 3 or 4 hours. Longer bookings are priced from the table: each hour at the 60-minute price, plus the 30-minute price for a half hour (1½ hours = 600 EGP, deposit 150).
+- Players choose how long with − / + buttons: it starts at 1 hour and moves by half an hour, from 30 minutes up to 4 hours. Longer bookings are priced from the table: each hour at the 60-minute price, plus the 30-minute price for a half hour (1½ hours = 600 EGP, deposit 150).
 - Open 3:00 PM to 1:00 AM. Bookings start on the hour or half hour.
 - A slot is held for 15 minutes while the player pays. Uploading the screenshot stops the timer.
 - No cancellations; deposits are non-refundable.
