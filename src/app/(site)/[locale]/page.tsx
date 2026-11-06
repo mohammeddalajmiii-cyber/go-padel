@@ -82,9 +82,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             </div>
           </div>
 
-          <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-night/75 p-5 backdrop-blur md:justify-self-end">
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-night/75 p-4 backdrop-blur md:justify-self-end">
             {/* The court from above */}
-            <CourtDrawing className="w-full" />
+            <CourtDrawing className="block w-full rounded-2xl" />
             <h2 className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-chalk/70 rtl:tracking-normal">{h.nextFree}</h2>
             {free.length ? (
               <ul className="mt-3 grid grid-cols-3 gap-2">
