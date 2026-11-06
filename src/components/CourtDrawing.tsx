@@ -1,22 +1,441 @@
-// The court from above, alive: a doubles rally that loops forever, with people watching.
-// Drawn to scale: a padel court is 10 m × 20 m (12 units per metre here), glass back walls
-// with 4 m glass returns, wire mesh along the sides, doors by the net, floodlights at the corners.
-// All motion is CSS (see .gp-court in globals.css), so it pauses for people who turn motion off.
+"use client";
 
-const X0 = 30; // court left edge
-const Y0 = 40; // court top edge
-const W = 240; // 20 m
-const H = 120; // 10 m
-const NET = X0 + W / 2;
-const SERVICE = 6.95 * 12; // service line distance from the net
+// The court from above with a live doubles match that never ends.
+//
+// A small match engine plans each point the way padel is played: players walk to the
+// serve formation, the server bounces the ball and serves underhand into the diagonal box,
+// then the rally goes on with drives, volleys at the net and lobs that push the net team
+// back. Deep balls bounce and come off the back glass. A point ends with a winner (two
+// bounces) or a ball into the net, and the scoreboard counts it: 0, 15, 30, 40, game, with
+// the golden point at 40–40. Spectators turn to follow the ball.
+//
+// Court units: metres, x 0–20 along the court (net at 10), y 0–10 across.
+// Drawing units: 12 per metre, the court's corner at (30, 40).
 
+import { useEffect, useRef } from "react";
+
+const S = 12;
+const OX = 30;
+const OY = 40;
+const W = 20 * S;
+const H = 10 * S;
+const sx = (x: number) => OX + S * x;
+const sy = (y: number) => OY + S * y;
+const NETX = 10;
+const SERVICE = 6.95;
+
+type V = { x: number; y: number };
+type Team = "L" | "R";
+type Half = "top" | "bottom";
+const PIDS = ["L1", "L2", "R1", "R2"] as const;
+type PID = (typeof PIDS)[number];
+const TEAM: Record<PID, Team> = { L1: "L", L2: "L", R1: "R", R2: "R" };
+const HALF: Record<PID, Half> = { L1: "top", L2: "bottom", R1: "top", R2: "bottom" };
+
+const rand = (a: number, b: number) => a + Math.random() * (b - a);
+const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
+const smooth = (u: number) => u * u * (3 - 2 * u);
+const add = (a: V, b: V): V => ({ x: a.x + b.x, y: a.y + b.y });
+const sub = (a: V, b: V): V => ({ x: a.x - b.x, y: a.y - b.y });
+const mul = (a: V, k: number): V => ({ x: a.x * k, y: a.y * k });
+const len = (a: V) => Math.hypot(a.x, a.y);
+const dist = (a: V, b: V) => len(sub(a, b));
+const norm = (a: V): V => mul(a, 1 / (len(a) || 1));
+const other = (t: Team): Team => (t === "L" ? "R" : "L");
+/** x of a spot `d` metres from the net on a team's side */
+const depthX = (t: Team, d: number) => (t === "L" ? NETX - d : NETX + d);
+const fromNet = (x: number) => Math.abs(x - NETX);
+const baseY = (p: PID) => (HALF[p] === "top" ? 2.6 : 7.4);
+/** Where the racket meets the ball, relative to the player (they face the net). */
+const hand = (t: Team): V => (t === "L" ? { x: 0.5, y: 0.72 } : { x: -0.5, y: -0.72 });
+const keepOnSide = (t: Team, v: V): V => ({
+  x: t === "L" ? clamp(v.x, 0.5, 9.3) : clamp(v.x, 10.7, 19.5),
+  y: clamp(v.y, 0.5, 9.5),
+});
+const inCourt = (v: V): V => ({ x: clamp(v.x, 0.35, 19.65), y: clamp(v.y, 0.35, 9.65) });
+const partnerOf = (p: PID) => PIDS.find((q) => TEAM[q] === TEAM[p] && q !== p)!;
+const playerAt = (t: Team, h: Half) => PIDS.find((q) => TEAM[q] === t && HALF[q] === h)!;
+
+// ---------- Plans ----------
+type Seg = { t0: number; t1: number; a: V; b: V; h0: number; h1: number; peak: number };
+type Move = { t0: number; t1: number; a: V; b: V };
+type Score = { p: [number, number]; g: [number, number]; server: Team };
+type Plan = {
+  start: number;
+  ballFrom: number;
+  segs: Seg[];
+  moves: Record<PID, Move[]>;
+  from: Record<PID, V>;
+  swings: { pid: PID; t: number }[];
+  flashes: { t: number; p: V; kind: "glass" | "side" | "net" }[];
+  scoreAt: number;
+  score: Score;
+  caption: string;
+  end: number;
+};
+
+function award(s: Score, team: Team): Score {
+  const i = team === "L" ? 0 : 1;
+  const p: [number, number] = [s.p[0], s.p[1]];
+  const g: [number, number] = [s.g[0], s.g[1]];
+  let server = s.server;
+  p[i]++;
+  // 0, 15, 30, 40, game. At 40–40 the next point wins (golden point).
+  if (p[i] === 4) {
+    g[i]++;
+    p[0] = 0;
+    p[1] = 0;
+    server = other(server);
+    if ((g[i] >= 6 && g[i] - g[1 - i] >= 2) || g[i] === 7) {
+      g[0] = 0;
+      g[1] = 0;
+    }
+  }
+  return { p, g, server };
+}
+
+function posIn(list: Move[], fallback: V, t: number): V {
+  let p = fallback;
+  for (const m of list) {
+    if (t >= m.t1) p = m.b;
+    else if (t >= m.t0) return { x: lerp(m.a.x, m.b.x, smooth((t - m.t0) / (m.t1 - m.t0))), y: lerp(m.a.y, m.b.y, smooth((t - m.t0) / (m.t1 - m.t0))) };
+    else break;
+  }
+  return p;
+}
+
+/** Players' spots while the server gets ready. */
+function formation(score: Score): Record<PID, V> {
+  const sT = score.server;
+  const rT = other(sT);
+  const point = score.p[0] + score.p[1];
+  // Serve from the right first, then alternate (L faces +x, so its right is the bottom half).
+  const right: Half = sT === "L" ? "bottom" : "top";
+  const serveHalf: Half = point % 2 === 0 ? right : right === "top" ? "bottom" : "top";
+  const recvHalf: Half = serveHalf === "top" ? "bottom" : "top";
+  const server = playerAt(sT, serveHalf);
+  const receiver = playerAt(rT, recvHalf);
+  const out = {} as Record<PID, V>;
+  out[server] = { x: depthX(sT, 7.9), y: serveHalf === "top" ? 3.3 : 6.7 };
+  out[partnerOf(server)] = { x: depthX(sT, 2.8), y: baseY(partnerOf(server)) };
+  out[receiver] = { x: depthX(rT, 8.1), y: recvHalf === "top" ? 2.3 : 7.7 };
+  out[partnerOf(receiver)] = { x: depthX(rT, 6.4), y: baseY(partnerOf(receiver)) };
+  return out;
+}
+
+type Shot = "serve" | "drive" | "volley" | "lob" | "smash";
+const SPEED: Record<Shot, number> = { serve: 10.5, drive: 15, volley: 13.5, lob: 8.5, smash: 21 };
+const PEAK: Record<Shot, number> = { serve: 1.5, drive: 1.3, volley: 1.0, lob: 5.5, smash: 2.6 };
+const wallX = (t: Team) => (t === "L" ? 0.12 : 19.88);
+
+function planPoint(start: number, from: Record<PID, V>, score: Score): Plan {
+  const moves = { L1: [], L2: [], R1: [], R2: [] } as Record<PID, Move[]>;
+  const segs: Seg[] = [];
+  const swings: Plan["swings"] = [];
+  const flashes: Plan["flashes"] = [];
+  const posAt = (p: PID, t: number) => posIn(moves[p], from[p], t);
+  const move = (p: PID, t0: number, t1: number, to: V) => {
+    const a = posAt(p, t0);
+    const list = moves[p];
+    const last = list[list.length - 1];
+    if (last && last.t1 > t0) {
+      last.b = a;
+      last.t1 = Math.max(last.t0 + 0.01, t0);
+    }
+    list.push({ t0, t1: Math.max(t1, t0 + 0.08), a, b: keepOnSide(TEAM[p], to) });
+  };
+  /** The nearest player of a team lunges for a ball they won't reach. */
+  const lunge = (team: Team, at: V, t0: number, t1: number, reach = 0.55) => {
+    const p = playerAt(team, at.y < 5 ? "top" : "bottom");
+    const cur = posAt(p, t0);
+    move(p, t0 + 0.15, t1, add(cur, mul(sub(sub(at, hand(team)), cur), reach)));
+  };
+
+  /**
+   * After the bounce at B (travelling along d), the ball comes off the back glass,
+   * and off the side glass too if it's near a corner. Returns where it can be played.
+   */
+  const offTheGlass = (B: V, d: V, tB: number, v: number, team: Team, hWall: number, peak: number) => {
+    const u = Math.max(0.2, (wallX(team) - B.x) / d.x);
+    const Wp = inCourt({ x: wallX(team), y: B.y + d.y * u });
+    const tW = tB + u / v;
+    segs.push({ t0: tB, t1: tW, a: B, b: Wp, h0: 0, h1: hWall, peak });
+    flashes.push({ t: tW, p: Wp, kind: "glass" });
+    let dir: V = norm({ x: -d.x, y: d.y });
+    let P = Wp;
+    let tP = tW;
+    let h = hWall;
+    if ((Wp.y < 1.9 && dir.y < 0) || (Wp.y > 8.1 && dir.y > 0)) {
+      const sideY = dir.y < 0 ? 0.12 : 9.88;
+      const u2 = (sideY - Wp.y) / dir.y;
+      if (u2 > 0 && u2 < 2.8) {
+        const Ws = inCourt({ x: Wp.x + dir.x * u2, y: sideY });
+        const tS = tW + u2 / (v * 0.8);
+        segs.push({ t0: tW, t1: tS, a: Wp, b: Ws, h0: hWall, h1: hWall * 0.85, peak: hWall + 0.15 });
+        flashes.push({ t: tS, p: Ws, kind: "side" });
+        dir = { x: dir.x, y: -dir.y };
+        P = Ws;
+        tP = tS;
+        h = hWall * 0.85;
+      }
+    }
+    let K = inCourt(add(P, mul(dir, rand(1.5, 2.5))));
+    K = { x: team === "L" ? Math.max(K.x, 1.3) : Math.min(K.x, 18.7), y: K.y };
+    const tK = tP + dist(P, K) / (v * 0.7);
+    segs.push({ t0: tP, t1: tK, a: P, b: K, h0: h, h1: 0.95, peak: h + 0.3 });
+    return { K, tK };
+  };
+
+  // 1. Walk to the serve formation.
+  const sT = score.server;
+  const f = formation(score);
+  const tReady = start + 1.7;
+  for (const p of PIDS) move(p, start, tReady, f[p]);
+  const point = score.p[0] + score.p[1];
+  const right: Half = sT === "L" ? "bottom" : "top";
+  const serveHalf: Half = point % 2 === 0 ? right : right === "top" ? "bottom" : "top";
+  const recvHalf: Half = serveHalf === "top" ? "bottom" : "top";
+  const server = playerAt(sT, serveHalf);
+
+  // 2. Bounce the ball once before serving.
+  const hb = add(f[server], hand(sT));
+  segs.push({ t0: tReady, t1: tReady + 0.28, a: hb, b: hb, h0: 1.0, h1: 0, peak: 1.0 });
+  segs.push({ t0: tReady + 0.28, t1: tReady + 0.56, a: hb, b: hb, h0: 0, h1: 1.0, peak: 1.0 });
+  segs.push({ t0: tReady + 0.56, t1: tReady + 0.85, a: hb, b: hb, h0: 1.0, h1: 0.9, peak: 1.0 });
+
+  // 3. The rally.
+  let hitter: PID = server;
+  let C = hb;
+  let t = tReady + 0.85;
+  let n = 0;
+  let forced: Shot | null = null;
+  let pointTo: Team = sT;
+  let caption = "";
+  let end = t;
+
+  for (;;) {
+    const hT = TEAM[hitter];
+    const oT = other(hT);
+    const hp = posAt(hitter, t);
+    const atNet = fromNet(hp.x) < 4.2;
+    swings.push({ pid: hitter, t });
+
+    const type: Shot =
+      forced ?? (n === 0 ? "serve" : atNet ? (Math.random() < 0.13 ? "lob" : "volley") : Math.random() < 0.32 ? "lob" : "drive");
+    forced = null;
+
+    // ----- Does this shot end the point? -----
+    const endChance = n < 2 ? 0 : n > 16 ? 1 : type === "smash" ? 0.6 : Math.min(0.45, 0.05 + n * 0.04);
+    if (Math.random() < endChance) {
+      if (type === "smash" && Math.random() < 0.55) {
+        // Por tres: the smash kicks up off the floor and flies out over the back glass.
+        const B = { x: depthX(oT, rand(5.2, 6.6)), y: rand(2, 8) };
+        const tB = t + dist(C, B) / SPEED.smash;
+        segs.push({ t0: t, t1: tB, a: C, b: B, h0: 2.6, h1: 0, peak: 2.6 });
+        const d = norm(sub(B, C));
+        const u = Math.max(0.5, (wallX(oT) - B.x) / d.x);
+        const Wp = { x: wallX(oT), y: clamp(B.y + d.y * u, 0.5, 9.5) };
+        const tW = tB + u / 13;
+        segs.push({ t0: tB, t1: tW, a: B, b: Wp, h0: 0, h1: 3.6, peak: 4.0 });
+        const O = { x: oT === "L" ? -1.9 : 21.9, y: Wp.y + d.y * 1.4 };
+        segs.push({ t0: tW, t1: tW + 0.55, a: Wp, b: O, h0: 3.6, h1: 0, peak: 4.4 });
+        const O2 = { x: oT === "L" ? -2.25 : 22.25, y: O.y + d.y * 0.4 };
+        segs.push({ t0: tW + 0.55, t1: tW + 0.95, a: O, b: O2, h0: 0, h1: 0, peak: 0.3 });
+        lunge(oT, { x: depthX(oT, 8.6), y: Wp.y }, t, tW + 0.3, 0.8);
+        caption = "SMASH · POR TRES";
+        pointTo = hT;
+        end = tW + 0.95;
+      } else if (type === "smash") {
+        // Smash winner: off the glass so high and fast the defenders can't get to it.
+        const B = { x: depthX(oT, rand(4.8, 6.2)), y: rand(1.6, 8.4) };
+        const tB = t + dist(C, B) / SPEED.smash;
+        segs.push({ t0: t, t1: tB, a: C, b: B, h0: 2.6, h1: 0, peak: 2.6 });
+        const d = norm(sub(B, C));
+        const u = Math.max(0.5, (wallX(oT) - B.x) / d.x);
+        const Wp = inCourt({ x: wallX(oT), y: B.y + d.y * u });
+        const tW = tB + u / 15;
+        segs.push({ t0: tB, t1: tW, a: B, b: Wp, h0: 0, h1: 2.4, peak: 3.0 });
+        flashes.push({ t: tW, p: Wp, kind: "glass" });
+        const B2 = inCourt({ x: depthX(oT, rand(4.6, 5.6)), y: Wp.y + d.y * 2 });
+        const tB2 = tW + dist(Wp, B2) / 9;
+        segs.push({ t0: tW, t1: tB2, a: Wp, b: B2, h0: 2.4, h1: 0, peak: 2.7 });
+        const B3 = inCourt({ x: depthX(oT, 3.4), y: B2.y + d.y * 0.6 });
+        segs.push({ t0: tB2, t1: tB2 + 0.6, a: B2, b: B3, h0: 0, h1: 0, peak: 0.6 });
+        lunge(oT, B2, tW, tB2 + 0.2, 0.5);
+        caption = "SMASH WINNER";
+        pointTo = hT;
+        end = tB2 + 0.6;
+      } else if (type === "lob") {
+        // Lob winner: over the net players, dies off the back glass.
+        const B = { x: depthX(oT, rand(8.4, 8.9)), y: rand(1.5, 8.5) };
+        const tB = t + dist(C, B) / SPEED.lob;
+        segs.push({ t0: t, t1: tB, a: C, b: B, h0: 1.0, h1: 0, peak: 5.8 });
+        const d = norm(sub(B, C));
+        const u = Math.max(0.15, (wallX(oT) - B.x) / d.x);
+        const Wp = inCourt({ x: wallX(oT), y: B.y + d.y * u });
+        const tW = tB + u / 5;
+        segs.push({ t0: tB, t1: tW, a: B, b: Wp, h0: 0, h1: 0.9, peak: 1.3 });
+        flashes.push({ t: tW, p: Wp, kind: "glass" });
+        const B2 = inCourt({ x: depthX(oT, 8.9), y: Wp.y + d.y * 0.5 });
+        segs.push({ t0: tW, t1: tW + 0.32, a: Wp, b: B2, h0: 0.9, h1: 0, peak: 0.95 });
+        const B3 = inCourt({ x: depthX(oT, 8.5), y: B2.y + d.y * 0.3 });
+        segs.push({ t0: tW + 0.32, t1: tW + 0.7, a: B2, b: B3, h0: 0, h1: 0, peak: 0.18 });
+        for (const p of PIDS.filter((q) => TEAM[q] === oT)) {
+          const cur = posAt(p, t);
+          move(p, t + 0.25, tW + 0.4, { x: depthX(oT, 6.4), y: cur.y });
+        }
+        caption = "LOB WINNER";
+        pointTo = hT;
+        end = tW + 0.7;
+      } else if (type === "volley") {
+        // Volley winner: angled away towards the side fence.
+        const top = Math.random() < 0.5;
+        const B = { x: depthX(oT, rand(3.0, 4.6)), y: top ? rand(0.7, 1.2) : rand(8.8, 9.3) };
+        const tB = t + dist(C, B) / 16;
+        segs.push({ t0: t, t1: tB, a: C, b: B, h0: 1.05, h1: 0, peak: 1.1 });
+        const Sd = { x: B.x + (oT === "L" ? -1.2 : 1.2), y: top ? 0.12 : 9.88 };
+        const tS = tB + dist(B, Sd) / 10;
+        segs.push({ t0: tB, t1: tS, a: B, b: Sd, h0: 0, h1: 0.7, peak: 0.9 });
+        flashes.push({ t: tS, p: Sd, kind: "side" });
+        const B2 = { x: Sd.x + (oT === "L" ? -1.4 : 1.4), y: top ? 1.3 : 8.7 };
+        segs.push({ t0: tS, t1: tS + 0.4, a: Sd, b: B2, h0: 0.7, h1: 0, peak: 0.8 });
+        const B3 = { x: B2.x + (oT === "L" ? -1.2 : 1.2), y: top ? 1.8 : 8.2 };
+        segs.push({ t0: tS + 0.4, t1: tS + 0.9, a: B2, b: B3, h0: 0, h1: 0, peak: 0.2 });
+        lunge(oT, B, t, tB + 0.3, 0.6);
+        caption = "VOLLEY WINNER";
+        pointTo = hT;
+        end = tS + 0.9;
+      } else if (Math.random() < 0.38) {
+        // Into the net.
+        const N = { x: NETX + (hT === "L" ? -0.1 : 0.1), y: clamp(C.y + rand(-1.6, 1.6), 0.8, 9.2) };
+        const tN = t + dist(C, N) / 14;
+        segs.push({ t0: t, t1: tN, a: C, b: N, h0: 1.0, h1: 0.55, peak: 1.0 });
+        flashes.push({ t: tN, p: N, kind: "net" });
+        const D = { x: depthX(hT, 0.7), y: N.y + 0.1 };
+        segs.push({ t0: tN, t1: tN + 0.34, a: N, b: D, h0: 0.55, h1: 0, peak: 0.6 });
+        const D2 = { x: depthX(hT, 1.15), y: N.y + 0.2 };
+        segs.push({ t0: tN + 0.34, t1: tN + 0.62, a: D, b: D2, h0: 0, h1: 0, peak: 0.16 });
+        caption = "INTO THE NET";
+        pointTo = oT;
+        end = tN + 0.62;
+      } else {
+        // Passing shot: down the line or through the middle.
+        const r = Math.random();
+        const B = { x: depthX(oT, rand(4.8, 7.2)), y: r < 0.45 ? rand(4.4, 5.6) : r < 0.72 ? rand(0.9, 1.4) : rand(8.6, 9.1) };
+        const tB = t + dist(C, B) / 16.5;
+        segs.push({ t0: t, t1: tB, a: C, b: B, h0: 1.1, h1: 0, peak: 1.2 });
+        const d = norm(sub(B, C));
+        const u = Math.max(0.5, (wallX(oT) - B.x) / d.x);
+        const Wp = inCourt({ x: wallX(oT), y: B.y + d.y * u });
+        const tW = tB + u / 12;
+        segs.push({ t0: tB, t1: tW, a: B, b: Wp, h0: 0, h1: 0.8, peak: 1.0 });
+        flashes.push({ t: tW, p: Wp, kind: "glass" });
+        const B2 = inCourt({ x: depthX(oT, 8.4), y: Wp.y + d.y * 1.2 });
+        const tB2 = tW + dist(Wp, B2) / 6;
+        segs.push({ t0: tW, t1: tB2, a: Wp, b: B2, h0: 0.8, h1: 0, peak: 0.9 });
+        const B3 = inCourt({ x: depthX(oT, 7.2), y: B2.y + d.y * 0.6 });
+        segs.push({ t0: tB2, t1: tB2 + 0.55, a: B2, b: B3, h0: 0, h1: 0, peak: 0.28 });
+        lunge(oT, B, t, tB + 0.25);
+        caption = r < 0.45 ? "WINNER DOWN THE MIDDLE" : "WINNER DOWN THE LINE";
+        pointTo = hT;
+        end = tB2 + 0.55;
+      }
+      break;
+    }
+
+    // ----- The rally goes on -----
+    let B: V;
+    if (type === "serve") B = { x: depthX(oT, rand(3.6, 6.4)), y: recvHalf === "top" ? rand(1.2, 4.2) : rand(5.8, 8.8) };
+    else if (type === "smash") B = { x: depthX(oT, rand(4.8, 6.6)), y: rand(1.4, 8.6) };
+    else B = { x: depthX(oT, type === "lob" ? rand(7.7, 8.7) : type === "volley" ? rand(3.8, 6.4) : rand(4.6, 7.4)), y: rand(1.3, 8.7) };
+
+    const rcv = playerAt(oT, B.y < 5 ? "top" : "bottom");
+    // In a real rally most balls land within reach: pull the bounce a little towards the receiver.
+    if (type !== "serve") B = { x: B.x, y: lerp(B.y, posAt(rcv, t).y, 0.3) };
+    const rPart = partnerOf(rcv);
+    const speed = SPEED[type];
+    const h0 = type === "serve" ? 0.9 : type === "smash" ? 2.6 : 1.0;
+    const rcvAtNet = fromNet(posAt(rcv, t).x) < 4.2;
+
+    let K: V | null = null;
+    let tK = t;
+
+    if (type === "lob" && rcvAtNet && Math.random() < 0.5) {
+      // A short lob: the net player steps back and smashes it out of the air.
+      const ix = depthX(oT, rand(3.4, 5.0));
+      const u = clamp((ix - C.x) / (B.x - C.x), 0.3, 0.95);
+      K = inCourt({ x: ix, y: lerp(C.y, B.y, u) });
+      tK = t + dist(C, K) / speed;
+      segs.push({ t0: t, t1: tK, a: C, b: K, h0: 1.0, h1: 2.6, peak: 5.2 });
+      forced = "smash";
+    } else if (rcvAtNet && (type === "drive" || type === "volley") && Math.random() < 0.7) {
+      // A net player cuts off a flat ball before it bounces: quick volleys.
+      const ix = depthX(oT, 2.3);
+      const u = (ix - C.x) / (B.x - C.x);
+      if (u > 0.25 && u < 0.95) {
+        K = inCourt({ x: ix, y: lerp(C.y, B.y, u) });
+        tK = t + dist(C, K) / speed;
+        segs.push({ t0: t, t1: tK, a: C, b: K, h0: 1.0, h1: 1.1, peak: 1.35 });
+      }
+    }
+
+    if (!K) {
+      const tB = t + dist(C, B) / speed;
+      segs.push({ t0: t, t1: tB, a: C, b: B, h0, h1: 0, peak: PEAK[type] });
+      const d = norm(sub(B, C));
+      const v2 = speed * (type === "smash" ? 0.8 : 0.72);
+      const carry = type === "lob" ? rand(2.6, 3.4) : rand(1.8, 3.2);
+      const after = add(B, mul(d, carry));
+      if (type === "smash" || (oT === "L" && after.x < 0.9) || (oT === "R" && after.x > 19.1)) {
+        // Off the back glass (and the side glass in the corners), then played.
+        const r = offTheGlass(B, d, tB, v2, oT, type === "smash" ? 2.3 : 1.5, type === "smash" ? 3.0 : type === "lob" ? 2.3 : 1.8);
+        K = r.K;
+        tK = r.tK;
+        // After defending a smash off the glass, the usual answer is a lob to win back the net.
+        if (type === "smash") forced = Math.random() < 0.65 ? "lob" : "drive";
+      } else {
+        K = inCourt(after);
+        tK = tB + carry / v2;
+        segs.push({ t0: tB, t1: tK, a: B, b: K, h0: 0, h1: 0.95, peak: type === "lob" ? 2.0 : 1.15 });
+      }
+    }
+
+    // Receiving pair: one goes to the ball, the partner lines up beside them.
+    move(rcv, t + 0.12, tK - 0.04, sub(K, hand(oT)));
+    const rd = fromNet(K.x);
+    const partnerDepth = rd < 4.5 ? 2.7 : clamp(rd - 0.4, 2.5, 8.3);
+    move(rPart, t + 0.2, tK, { x: depthX(oT, partnerDepth), y: baseY(rPart) + (K.y - 5) * 0.25 });
+
+    // Hitting pair: after a lob, serve, volley or smash they take or hold the net; otherwise they hold their depth.
+    for (const p of PIDS.filter((q) => TEAM[q] === hT)) {
+      const cur = posAt(p, t);
+      const depth = type === "drive" ? clamp(fromNet(cur.x), 2.6, 8.2) : 2.7;
+      move(p, t + 0.25, Math.max(t + 0.9, tK - 0.1), { x: depthX(hT, depth), y: baseY(p) + (K.y - 5) * 0.3 });
+    }
+
+    hitter = rcv;
+    C = K;
+    t = tK;
+    n++;
+  }
+
+  const golden = score.p[0] === 3 && score.p[1] === 3;
+  const next = award(score, pointTo);
+  const game = next.g[0] !== score.g[0] || next.g[1] !== score.g[1];
+  if (golden) caption = `GOLDEN POINT · ${caption}`;
+  else if (game) caption = `${caption} · GAME`;
+  const scoreAt = end + 0.35;
+  return { start, ballFrom: tReady, segs, moves, from, swings, flashes, scoreAt, score: next, caption, end: scoreAt + 1.6 };
+}
+
+// ---------- Drawing ----------
 type Look = { shirt: string; hair: string; skin: string; legs?: string };
 
 /** One person seen from above, facing +x, centred on their shoulders. Drawn a little larger than life so it reads at card size. */
-function Person({ look, racket, seated }: { look: Look; racket?: string; seated?: boolean }) {
+function Person({ look, racket, seated, swingRef }: { look: Look; racket?: string; seated?: boolean; swingRef?: (el: SVGGElement | null) => void }) {
   return (
     <g transform="scale(1.32)">
-      {/* soft shadow, thrown away from the floodlights */}
       <ellipse cx="1.4" cy="1.7" rx={seated ? 4.6 : 3.4} ry="3.9" fill="#000" opacity="0.42" filter="url(#gpc-soft)" />
       {seated && (
         <g fill={look.legs ?? "#2b2f36"}>
@@ -24,11 +443,9 @@ function Person({ look, racket, seated }: { look: Look; racket?: string; seated?
           <rect x="0.4" y="0.35" width="4.4" height="1.75" rx="0.85" />
         </g>
       )}
-      {/* left arm */}
       <rect x="-0.5" y={racket ? -3.95 : -3.7} width={racket ? 3.1 : seated ? 3.3 : 2.3} height="1.1" rx="0.55" fill={look.skin} transform={`rotate(${racket ? -8 : -3} -0.5 -3.4)`} />
       {racket ? (
-        <g className="gp-swing">
-          {/* right arm reaching forward with the racket */}
+        <g ref={swingRef}>
           <rect x="-0.4" y="2.8" width="3.6" height="1.15" rx="0.57" fill={look.skin} transform="rotate(22 -0.4 3.3)" />
           <line x1="2.6" y1="5" x2="3.5" y2="5.8" stroke="#111" strokeWidth="0.7" strokeLinecap="round" />
           <ellipse cx="4.6" cy="6.75" rx="1.55" ry="1.95" transform="rotate(-40 4.6 6.75)" fill="#151515" stroke={racket} strokeWidth="0.42" />
@@ -37,10 +454,8 @@ function Person({ look, racket, seated }: { look: Look; racket?: string; seated?
       ) : (
         <rect x="-0.5" y="2.6" width={seated ? 3.3 : 2.3} height="1.1" rx="0.55" fill={look.skin} transform="rotate(3 -0.5 3.2)" />
       )}
-      {/* shoulders and back */}
       <rect x="-1.8" y="-3.6" width="3.6" height="7.2" rx="1.75" fill={look.shirt} />
       <rect x="-1.8" y="-3.6" width="3.6" height="7.2" rx="1.75" fill="url(#gpc-shade)" />
-      {/* head: hair on top, a little face showing at the front */}
       <ellipse cx="1.25" cy="0" rx="0.75" ry="1.05" fill={look.skin} />
       <circle cx="0.25" cy="0" r="1.42" fill={look.hair} />
       <circle cx="-0.15" cy="-0.45" r="0.6" fill="#fff" opacity="0.1" />
@@ -48,56 +463,238 @@ function Person({ look, racket, seated }: { look: Look; racket?: string; seated?
   );
 }
 
-const PLAYERS: { id: "A" | "B" | "C" | "D"; look: Look; rim: string; facing: 0 | 180 }[] = [
-  { id: "A", look: { shirt: "#ecebe6", hair: "#2a1d14", skin: "#c69a78" }, rim: "#c8f031", facing: 0 },
-  { id: "B", look: { shirt: "#d8d6cf", hair: "#15110e", skin: "#a8785a" }, rim: "#e9e9e9", facing: 0 },
-  { id: "C", look: { shirt: "#1c1e22", hair: "#3b2a1e", skin: "#d2a684" }, rim: "#d64545", facing: 180 },
-  { id: "D", look: { shirt: "#6e2626", hair: "#8f6d47", skin: "#c99a76" }, rim: "#e9e9e9", facing: 180 },
+const LOOKS: Record<PID, { look: Look; rim: string }> = {
+  L1: { look: { shirt: "#ecebe6", hair: "#2a1d14", skin: "#c69a78" }, rim: "#c8f031" },
+  L2: { look: { shirt: "#d8d6cf", hair: "#15110e", skin: "#a8785a" }, rim: "#e9e9e9" },
+  R1: { look: { shirt: "#6e2626", hair: "#8f6d47", skin: "#c99a76" }, rim: "#e9e9e9" },
+  R2: { look: { shirt: "#1c1e22", hair: "#3b2a1e", skin: "#d2a684" }, rim: "#d64545" },
+};
+
+// People watching: position (drawing units), the way they face (degrees), and whether they follow the ball.
+type Watcher = { x: number; y: number; face: number; look: Look; seated?: boolean; follows: number };
+const WATCHERS: Watcher[] = [
+  { x: 74, y: 182.5, face: -90, seated: true, follows: 0.7, look: { shirt: "#3a4a5e", hair: "#1a1410", skin: "#b98a68", legs: "#1f2229" } },
+  { x: 96, y: 182.5, face: -90, seated: true, follows: 0.6, look: { shirt: "#c9c2b0", hair: "#2c2018", skin: "#c99a76", legs: "#3c3a35" } },
+  { x: 118, y: 182.5, face: -90, seated: true, follows: 0.75, look: { shirt: "#5a5f3d", hair: "#120e0b", skin: "#8d5f43", legs: "#22252b" } },
+  { x: 182, y: 182.5, face: -90, seated: true, follows: 0.7, look: { shirt: "#8a2f3a", hair: "#3b2a1e", skin: "#d2a684", legs: "#1f2229" } },
+  { x: 204, y: 182.5, face: -90, seated: true, follows: 0.55, look: { shirt: "#e6e3dc", hair: "#1a1410", skin: "#a8785a", legs: "#2f3540" } },
+  { x: 226, y: 182.5, face: -90, seated: true, follows: 0.7, look: { shirt: "#2d3036", hair: "#6b4f35", skin: "#c69a78", legs: "#1b1d21" } },
+  { x: 52, y: 29, face: 90, follows: 0.8, look: { shirt: "#2f3a4a", hair: "#15110e", skin: "#a8785a" } },
+  { x: 63, y: 30, face: 90, follows: 0.8, look: { shirt: "#e4e0d6", hair: "#6b4f35", skin: "#d2a684" } },
+  { x: 236.5, y: 18, face: 0, seated: true, follows: 0.15, look: { shirt: "#40464f", hair: "#1a1410", skin: "#b98a68", legs: "#20232a" } },
+  { x: 255.5, y: 18, face: 180, seated: true, follows: 0.35, look: { shirt: "#b8a68a", hair: "#3b2a1e", skin: "#c99a76", legs: "#33302b" } },
 ];
 
-// Spectators on the bench below the court, facing the play.
-const BENCH: { x: number; look: Look; delay: number }[] = [
-  { x: 74, look: { shirt: "#3a4a5e", hair: "#1a1410", skin: "#b98a68", legs: "#1f2229" }, delay: -0.2 },
-  { x: 96, look: { shirt: "#c9c2b0", hair: "#2c2018", skin: "#c99a76", legs: "#3c3a35" }, delay: -0.5 },
-  { x: 118, look: { shirt: "#5a5f3d", hair: "#120e0b", skin: "#8d5f43", legs: "#22252b" }, delay: -0.1 },
-  { x: 182, look: { shirt: "#8a2f3a", hair: "#3b2a1e", skin: "#d2a684", legs: "#1f2229" }, delay: -0.35 },
-  { x: 204, look: { shirt: "#e6e3dc", hair: "#1a1410", skin: "#a8785a", legs: "#2f3540" }, delay: -0.6 },
-  { x: 226, look: { shirt: "#2d3036", hair: "#6b4f35", skin: "#c69a78", legs: "#1b1d21" }, delay: -0.15 },
-];
-
-// Steel posts every 2 m around the court.
-const POSTS: [number, number][] = [];
-for (let i = 0; i <= 10; i++) {
-  POSTS.push([X0 + i * 24, Y0], [X0 + i * 24, Y0 + H]);
-}
-for (let j = 1; j < 5; j++) POSTS.push([X0, Y0 + j * 24], [X0 + W, Y0 + j * 24]);
-
-// Side fences: glass for the first 4 m from each back wall, mesh in between, with doors by the net.
-const GLASS_RETURN = 4 * 12;
+// Steel posts every 2 m; glass for 4 m from each back wall, mesh between, doors by the net.
+const GLASS_RETURN = 4 * S;
+const NET_SX = sx(NETX);
 const DOORS: [number, number][] = [
-  [NET - 22, NET - 10],
-  [NET + 10, NET + 22],
+  [NET_SX - 22, NET_SX - 10],
+  [NET_SX + 10, NET_SX + 22],
 ];
-function meshRuns(): [number, number][] {
-  const runs: [number, number][] = [];
-  let from = X0 + GLASS_RETURN;
-  for (const [a, b] of DOORS) {
-    runs.push([from, a]);
-    from = b;
-  }
-  runs.push([from, X0 + W - GLASS_RETURN]);
-  return runs;
+const POSTS: [number, number][] = [];
+for (let i = 0; i <= 10; i++) POSTS.push([OX + i * 24, OY], [OX + i * 24, OY + H]);
+for (let j = 1; j < 5; j++) POSTS.push([OX, OY + j * 24], [OX + W, OY + j * 24]);
+const MESH: [number, number][] = [
+  [OX + GLASS_RETURN, DOORS[0][0]],
+  [DOORS[0][1], DOORS[1][0]],
+  [DOORS[1][1], OX + W - GLASS_RETURN],
+];
+const LIGHTS: [number, number][] = [
+  [OX - 8, OY - 8],
+  [OX + W + 8, OY - 8],
+  [OX - 8, OY + H + 8],
+  [OX + W + 8, OY + H + 8],
+];
+const POINTS = ["0", "15", "30", "40"];
+
+/** A palm seen from above. */
+function Palm({ x, y, r }: { x: number; y: number; r: number }) {
+  const leaves = 11;
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      <circle cx="2" cy="2.5" r={r * 0.95} fill="#000" opacity="0.35" filter="url(#gpc-soft)" />
+      {Array.from({ length: leaves }, (_, i) => (
+        <g key={i} transform={`rotate(${(360 / leaves) * i + (i % 2) * 9})`}>
+          <path d={`M0 0 Q ${r * 0.5} ${-r * 0.16} ${r} 0 Q ${r * 0.5} ${r * 0.16} 0 0`} fill={i % 2 ? "#2f4a2b" : "#3a5a33"} />
+          <line x1="0" y1="0" x2={r * 0.95} y2="0" stroke="#4f7346" strokeWidth="0.25" opacity="0.7" />
+        </g>
+      ))}
+      <circle r={r * 0.12} fill="#5a4330" />
+    </g>
+  );
 }
 
 export function CourtDrawing({ className }: { className?: string }) {
-  const lights: [number, number][] = [
-    [X0 - 8, Y0 - 8],
-    [X0 + W + 8, Y0 - 8],
-    [X0 - 8, Y0 + H + 8],
-    [X0 + W + 8, Y0 + H + 8],
-  ];
+  const players = useRef<Record<PID, SVGGElement | null>>({ L1: null, L2: null, R1: null, R2: null });
+  const swings = useRef<Record<PID, SVGGElement | null>>({ L1: null, L2: null, R1: null, R2: null });
+  const ball = useRef<SVGGElement | null>(null);
+  const ballUp = useRef<SVGGElement | null>(null);
+  const ballShadow = useRef<SVGEllipseElement | null>(null);
+  const glassFlash = useRef<SVGEllipseElement | null>(null);
+  const netFlash = useRef<SVGLineElement | null>(null);
+  const sideFlash = useRef<SVGEllipseElement | null>(null);
+  const caption = useRef<SVGTextElement | null>(null);
+  const watchers = useRef<(SVGGElement | null)[]>([]);
+  const scoreL = useRef<SVGTextElement | null>(null);
+  const scoreR = useRef<SVGTextElement | null>(null);
+  const gamesL = useRef<SVGTextElement | null>(null);
+  const gamesR = useRef<SVGTextElement | null>(null);
+  const root = useRef<SVGSVGElement | null>(null);
+
+  const first: Score = { p: [0, 0], g: [0, 0], server: "L" };
+  const start = formation(first);
+
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+
+    let score = first;
+    let shown = first;
+    let plan = planPoint(0, start, score);
+    let sim = 0;
+    let last = performance.now();
+    let visible = true;
+    let frame = 0;
+    let capAt = -99;
+    const facing: Record<PID, number> = { L1: 0, L2: 0, R1: 180, R2: 180 };
+    const looks = WATCHERS.map((w) => w.face);
+
+    const io = new IntersectionObserver(([e]) => (visible = e.isIntersecting));
+    if (root.current) io.observe(root.current);
+
+    const ballAt = (t: number) => {
+      const segs = plan.segs;
+      let s = segs[segs.length - 1];
+      for (const g of segs) {
+        if (t < g.t1) {
+          s = g;
+          break;
+        }
+      }
+      const u = clamp((t - s.t0) / (s.t1 - s.t0), 0, 1);
+      const h = lerp(s.h0, s.h1, u) + 4 * Math.max(0, s.peak - Math.max(s.h0, s.h1)) * u * (1 - u);
+      return { p: { x: lerp(s.a.x, s.b.x, u), y: lerp(s.a.y, s.b.y, u) }, h };
+    };
+
+    const swingAngle = (pid: PID, t: number) => {
+      for (const s of plan.swings) {
+        if (s.pid !== pid) continue;
+        const d = t - s.t;
+        if (d < -0.35 || d > 0.5) continue;
+        if (d < 0) return -55 * smooth((d + 0.35) / 0.35);
+        if (d < 0.14) return lerp(-55, 38, d / 0.14);
+        return 38 * (1 - smooth((d - 0.14) / 0.36));
+      }
+      return 0;
+    };
+
+    const draw = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (visible && !document.hidden) sim += dt;
+      while (sim >= plan.end) {
+        const from = {} as Record<PID, V>;
+        for (const p of PIDS) from[p] = posIn(plan.moves[p], plan.from[p], plan.end);
+        score = plan.score;
+        plan = planPoint(plan.end, from, score);
+      }
+      const t = sim;
+      const b = ballAt(t);
+      const ballOn = t >= plan.ballFrom;
+
+      // Players: where they are, which way they look, and the racket swing.
+      for (const p of PIDS) {
+        const pos = posIn(plan.moves[p], plan.from[p], t);
+        const base = TEAM[p] === "L" ? 0 : 180;
+        let want = base;
+        if (ballOn) {
+          const a = (Math.atan2(b.p.y - pos.y, b.p.x - pos.x) * 180) / Math.PI;
+          const delta = ((a - base + 540) % 360) - 180;
+          want = base + clamp(delta, -38, 38);
+        }
+        facing[p] += (want - facing[p]) * 0.12;
+        players.current[p]?.setAttribute("transform", `translate(${sx(pos.x).toFixed(2)} ${sy(pos.y).toFixed(2)}) rotate(${facing[p].toFixed(1)})`);
+        swings.current[p]?.setAttribute("transform", `rotate(${swingAngle(p, t).toFixed(1)})`);
+      }
+
+      // Ball: its spot on the ground (shadow) and its height (lifted and a touch larger).
+      if (ball.current) {
+        ball.current.setAttribute("opacity", ballOn ? "1" : "0");
+        ball.current.setAttribute("transform", `translate(${sx(b.p.x).toFixed(2)} ${sy(b.p.y).toFixed(2)})`);
+        ballUp.current?.setAttribute("transform", `translate(${(b.h * 0.9).toFixed(2)} ${(-b.h * 1.5).toFixed(2)}) scale(${(1 + b.h * 0.08).toFixed(3)})`);
+        ballShadow.current?.setAttribute("opacity", (0.5 - Math.min(b.h, 5) * 0.07).toFixed(2));
+      }
+
+      // Glass and net flashes where the ball hits.
+      let g = 0;
+      let sf = 0;
+      let nf = 0;
+      for (const f of plan.flashes) {
+        const d = t - f.t;
+        if (d < 0 || d > 0.4) continue;
+        if (f.kind === "glass" && glassFlash.current) {
+          g = 1 - d / 0.4;
+          glassFlash.current.setAttribute("cx", sx(f.p.x < NETX ? 0 : 20).toFixed(2));
+          glassFlash.current.setAttribute("cy", sy(f.p.y).toFixed(2));
+        }
+        if (f.kind === "side" && sideFlash.current) {
+          sf = 1 - d / 0.4;
+          sideFlash.current.setAttribute("cx", sx(f.p.x).toFixed(2));
+          sideFlash.current.setAttribute("cy", sy(f.p.y < 5 ? 0 : 10).toFixed(2));
+        }
+        if (f.kind === "net") nf = 1 - d / 0.4;
+      }
+      glassFlash.current?.setAttribute("opacity", (g * 0.9).toFixed(2));
+      sideFlash.current?.setAttribute("opacity", (sf * 0.9).toFixed(2));
+      netFlash.current?.setAttribute("opacity", (nf * 0.9).toFixed(2));
+
+      // Spectators turn to follow the ball.
+      WATCHERS.forEach((w, i) => {
+        let want = w.face;
+        if (ballOn) {
+          const a = (Math.atan2(sy(b.p.y) - w.y, sx(b.p.x) - w.x) * 180) / Math.PI;
+          const delta = ((a - w.face + 540) % 360) - 180;
+          want = w.face + clamp(delta, -50, 50) * w.follows;
+        }
+        looks[i] += (want - looks[i]) * 0.06;
+        watchers.current[i]?.setAttribute("transform", `translate(${w.x} ${w.y}) rotate(${looks[i].toFixed(1)})`);
+      });
+
+      // Name the shot that won the point, under the scoreboard.
+      if (caption.current) {
+        if (t >= plan.scoreAt && capAt < plan.scoreAt) {
+          capAt = plan.scoreAt;
+          caption.current.textContent = plan.caption;
+        }
+        const d = t - capAt;
+        const o = d < 0 ? 0 : d < 0.25 ? d / 0.25 : d < 3 ? 1 : d < 3.5 ? 1 - (d - 3) / 0.5 : 0;
+        caption.current.setAttribute("opacity", o.toFixed(2));
+      }
+
+      // Scoreboard updates when the point is over.
+      const sc = t >= plan.scoreAt ? plan.score : score;
+      if (sc !== shown) {
+        shown = sc;
+        if (scoreL.current) scoreL.current.textContent = POINTS[sc.p[0]];
+        if (scoreR.current) scoreR.current.textContent = POINTS[sc.p[1]];
+        if (gamesL.current) gamesL.current.textContent = String(sc.g[0]);
+        if (gamesR.current) gamesR.current.textContent = String(sc.g[1]);
+      }
+
+      frame = requestAnimationFrame(draw);
+    };
+    frame = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(frame);
+      io.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const serverHand = add(start[playerAt("L", "bottom")], hand("L"));
+
   return (
-    <svg viewBox="0 0 300 200" className={`gp-court ${className ?? ""}`} role="img" aria-label="Padel court seen from above with a doubles game in play">
+    <svg ref={root} viewBox="0 0 300 200" className={`gp-court ${className ?? ""}`} role="img" aria-label="Padel court seen from above with a doubles match in play">
       <defs>
         <linearGradient id="gpc-turf" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#2257bd" />
@@ -130,97 +727,117 @@ export function CourtDrawing({ className }: { className?: string }) {
           <stop offset="0" stopColor="#fffbe8" stopOpacity="0.9" />
           <stop offset="1" stopColor="#fffbe8" stopOpacity="0" />
         </radialGradient>
+        <radialGradient id="gpc-flash">
+          <stop offset="0" stopColor="#ffffff" stopOpacity="0.95" />
+          <stop offset="1" stopColor="#bfe0ff" stopOpacity="0" />
+        </radialGradient>
         <clipPath id="gpc-court">
-          <rect x={X0} y={Y0} width={W} height={H} />
+          <rect x={OX} y={OY} width={W} height={H} />
         </clipPath>
       </defs>
 
-      {/* Ground around the court */}
+      {/* Ground, palms */}
       <rect width="300" height="200" fill="url(#gpc-tiles)" />
+      <Palm x={6} y={8} r={15} />
+      <Palm x={293} y={193} r={14} />
 
-      {/* Turf with its rows and grain */}
-      <rect x={X0} y={Y0} width={W} height={H} fill="url(#gpc-turf)" />
-      <rect x={X0} y={Y0} width={W} height={H} fill="url(#gpc-rows)" />
-      <rect x={X0} y={Y0} width={W} height={H} filter="url(#gpc-grain)" opacity="0.6" />
-
-      {/* Floodlight pools on the court */}
+      {/* Turf */}
+      <rect x={OX} y={OY} width={W} height={H} fill="url(#gpc-turf)" />
+      <rect x={OX} y={OY} width={W} height={H} fill="url(#gpc-rows)" />
+      <rect x={OX} y={OY} width={W} height={H} filter="url(#gpc-grain)" opacity="0.6" />
       <g clipPath="url(#gpc-court)">
-        {lights.map(([x, y]) => (
-          <ellipse key={`p${x}-${y}`} cx={x + (x < NET ? 40 : -40)} cy={y + (y < 100 ? 30 : -30)} rx="90" ry="62" fill="url(#gpc-pool)" />
+        {LIGHTS.map(([x, y]) => (
+          <ellipse key={`p${x}-${y}`} cx={x + (x < NET_SX ? 40 : -40)} cy={y + (y < 100 ? 30 : -30)} rx="90" ry="62" fill="url(#gpc-pool)" />
         ))}
       </g>
 
-      {/* Lines */}
-      <g stroke="#f2f4f8" strokeWidth="0.8" fill="none" opacity="0.92">
-        <line x1={NET - SERVICE} y1={Y0} x2={NET - SERVICE} y2={Y0 + H} />
-        <line x1={NET + SERVICE} y1={Y0} x2={NET + SERVICE} y2={Y0 + H} />
-        <line x1={NET - SERVICE} y1={Y0 + H / 2} x2={NET + SERVICE} y2={Y0 + H / 2} />
-      </g>
-
-      {/* Net: shadow, mesh band, white tape, posts */}
-      <line x1={NET + 1.6} y1={Y0 - 1} x2={NET + 1.6} y2={Y0 + H + 1} stroke="#000" strokeWidth="2.2" opacity="0.28" filter="url(#gpc-soft)" />
-      <line x1={NET} y1={Y0 - 1.5} x2={NET} y2={Y0 + H + 1.5} stroke="#0d0d0d" strokeWidth="1.4" opacity="0.75" />
-      <line x1={NET} y1={Y0 - 1.5} x2={NET} y2={Y0 + H + 1.5} stroke="#f5f5f5" strokeWidth="0.55" />
-      <rect x={NET - 1.3} y={Y0 - 3.2} width="2.6" height="2.6" rx="0.4" fill="#1a1a1a" />
-      <rect x={NET - 1.3} y={Y0 + H + 0.6} width="2.6" height="2.6" rx="0.4" fill="#1a1a1a" />
-
-      {/* Players and the ball */}
-      {PLAYERS.map((p) => (
-        <g key={p.id} className={`gp-p gp-p${p.id}`}>
-          <g transform={`rotate(${p.facing})`}>
-            <Person look={p.look} racket={p.rim} />
-          </g>
+      {/* Club logo painted behind each service line */}
+      {[sx(1.55), sx(18.45)].map((x, i) => (
+        <g key={`logo${x}`} transform={`translate(${x} ${sy(5)}) rotate(${i ? 90 : -90})`} opacity="0.13" fill="#fff">
+          <text x="0" y="1.6" textAnchor="middle" fontFamily="Inter, sans-serif" fontWeight="700" fontSize="4.6" letterSpacing="0.9">
+            GO PADEL
+          </text>
         </g>
       ))}
-      <g className="gp-ball">
-        <ellipse className="gp-ball-s" cx="0" cy="0" rx="1.3" ry="1" fill="#000" opacity="0.45" filter="url(#gpc-soft)" />
-        <g className="gp-ball-h">
+
+      {/* Lines */}
+      <g stroke="#f2f4f8" strokeWidth="0.8" fill="none" opacity="0.92">
+        <line x1={sx(NETX - SERVICE)} y1={OY} x2={sx(NETX - SERVICE)} y2={OY + H} />
+        <line x1={sx(NETX + SERVICE)} y1={OY} x2={sx(NETX + SERVICE)} y2={OY + H} />
+        <line x1={sx(NETX - SERVICE)} y1={sy(5)} x2={sx(NETX + SERVICE)} y2={sy(5)} />
+      </g>
+
+      {/* Net */}
+      <line x1={NET_SX + 1.6} y1={OY - 1} x2={NET_SX + 1.6} y2={OY + H + 1} stroke="#000" strokeWidth="2.2" opacity="0.28" filter="url(#gpc-soft)" />
+      <line x1={NET_SX} y1={OY - 1.5} x2={NET_SX} y2={OY + H + 1.5} stroke="#0d0d0d" strokeWidth="1.4" opacity="0.75" />
+      <line x1={NET_SX} y1={OY - 1.5} x2={NET_SX} y2={OY + H + 1.5} stroke="#f5f5f5" strokeWidth="0.55" />
+      <line ref={netFlash} x1={NET_SX} y1={OY} x2={NET_SX} y2={OY + H} stroke="#ffffff" strokeWidth="2.4" opacity="0" filter="url(#gpc-soft)" />
+      <rect x={NET_SX - 1.3} y={OY - 3.2} width="2.6" height="2.6" rx="0.4" fill="#1a1a1a" />
+      <rect x={NET_SX - 1.3} y={OY + H + 0.6} width="2.6" height="2.6" rx="0.4" fill="#1a1a1a" />
+
+      {/* Players */}
+      {PIDS.map((p) => (
+        <g
+          key={p}
+          ref={(el: SVGGElement | null) => {
+            players.current[p] = el;
+          }}
+          transform={`translate(${sx(start[p].x)} ${sy(start[p].y)}) rotate(${TEAM[p] === "L" ? 0 : 180})`}
+        >
+          <Person
+            look={LOOKS[p].look}
+            racket={LOOKS[p].rim}
+            swingRef={(el) => {
+              swings.current[p] = el;
+            }}
+          />
+        </g>
+      ))}
+
+      {/* Walls: glass at the back and the first 4 m of each side, mesh between, steel posts */}
+      {[OX, OX + W].map((x) => (
+        <g key={`bw${x}`}>
+          <line x1={x} y1={OY} x2={x} y2={OY + H} stroke="#000" strokeWidth="3" opacity="0.35" filter="url(#gpc-soft)" />
+          <line x1={x} y1={OY} x2={x} y2={OY + H} stroke="#bfe0ff" strokeWidth="2.4" opacity="0.28" />
+          <line x1={x + (x === OX ? 0.7 : -0.7)} y1={OY} x2={x + (x === OX ? 0.7 : -0.7)} y2={OY + H} stroke="#e8f4ff" strokeWidth="0.35" opacity="0.7" />
+        </g>
+      ))}
+      <ellipse ref={glassFlash} cx={OX} cy={OY + H / 2} rx="3.5" ry="9" fill="url(#gpc-flash)" opacity="0" />
+      <ellipse ref={sideFlash} cx={OX} cy={OY} rx="9" ry="3.5" fill="url(#gpc-flash)" opacity="0" />
+      {[OY, OY + H].flatMap((y) =>
+        [
+          [OX, OX + GLASS_RETURN],
+          [OX + W - GLASS_RETURN, OX + W],
+        ].map(([a, b]) => (
+          <g key={`gr${y}-${a}`}>
+            <line x1={a} y1={y} x2={b} y2={y} stroke="#bfe0ff" strokeWidth="2.4" opacity="0.28" />
+            <line x1={a} y1={y + (y === OY ? 0.7 : -0.7)} x2={b} y2={y + (y === OY ? 0.7 : -0.7)} stroke="#e8f4ff" strokeWidth="0.35" opacity="0.7" />
+          </g>
+        )),
+      )}
+      {[OY, OY + H].flatMap((y) =>
+        MESH.map(([a, b]) => (
+          <g key={`m${y}-${a}`}>
+            <line x1={a} y1={y} x2={b} y2={y} stroke="#9aa0a8" strokeWidth="1.5" strokeDasharray="0.45 0.45" opacity="0.55" />
+            <line x1={a} y1={y} x2={b} y2={y} stroke="#2a2d31" strokeWidth="0.3" />
+          </g>
+        )),
+      )}
+      {[...POSTS.filter(([x]) => !DOORS.some(([a, b]) => x > a && x < b)), ...DOORS.flat().flatMap((x) => [[x, OY] as [number, number], [x, OY + H] as [number, number]])].map(([x, y]) => (
+        <rect key={`po${x}-${y}`} x={x - 0.9} y={y - 0.9} width="1.8" height="1.8" fill="#0b0b0b" stroke="#3a3a3a" strokeWidth="0.2" />
+      ))}
+
+      {/* Ball */}
+      <g ref={ball} transform={`translate(${sx(serverHand.x)} ${sy(serverHand.y)})`}>
+        <ellipse ref={ballShadow} rx="1.3" ry="1" fill="#000" opacity="0.4" filter="url(#gpc-soft)" />
+        <g ref={ballUp} transform="translate(0.9 -1.5)">
           <circle r="1.25" fill="#d7f43c" />
           <circle cx="-0.4" cy="-0.4" r="0.45" fill="#fff" opacity="0.55" />
         </g>
       </g>
 
-      {/* Back walls: glass on a steel frame */}
-      <g>
-        {[X0, X0 + W].map((x) => (
-          <g key={`bw${x}`}>
-            <line x1={x} y1={Y0} x2={x} y2={Y0 + H} stroke="#000" strokeWidth="3" opacity="0.35" filter="url(#gpc-soft)" />
-            <line x1={x} y1={Y0} x2={x} y2={Y0 + H} stroke="#bfe0ff" strokeWidth="2.4" opacity="0.28" />
-            <line x1={x + (x === X0 ? 0.7 : -0.7)} y1={Y0} x2={x + (x === X0 ? 0.7 : -0.7)} y2={Y0 + H} stroke="#e8f4ff" strokeWidth="0.35" opacity="0.7" />
-          </g>
-        ))}
-        {/* Glass returns on the sides */}
-        {[Y0, Y0 + H].map((y) =>
-          [
-            [X0, X0 + GLASS_RETURN],
-            [X0 + W - GLASS_RETURN, X0 + W],
-          ].map(([a, b]) => (
-            <g key={`gr${y}-${a}`}>
-              <line x1={a} y1={y} x2={b} y2={y} stroke="#bfe0ff" strokeWidth="2.4" opacity="0.28" />
-              <line x1={a} y1={y + (y === Y0 ? 0.7 : -0.7)} x2={b} y2={y + (y === Y0 ? 0.7 : -0.7)} stroke="#e8f4ff" strokeWidth="0.35" opacity="0.7" />
-            </g>
-          )),
-        )}
-        {/* Wire mesh along the sides, with doors by the net */}
-        {[Y0, Y0 + H].map((y) =>
-          meshRuns().map(([a, b]) => (
-            <g key={`m${y}-${a}`}>
-              <line x1={a} y1={y} x2={b} y2={y} stroke="#9aa0a8" strokeWidth="1.5" strokeDasharray="0.45 0.45" opacity="0.55" />
-              <line x1={a} y1={y} x2={b} y2={y} stroke="#2a2d31" strokeWidth="0.3" />
-            </g>
-          )),
-        )}
-        {/* Steel posts */}
-        {POSTS.filter(([x]) => !DOORS.some(([a, b]) => x > a && x < b)).map(([x, y]) => (
-          <rect key={`po${x}-${y}`} x={x - 0.9} y={y - 0.9} width="1.8" height="1.8" fill="#0b0b0b" stroke="#3a3a3a" strokeWidth="0.2" />
-        ))}
-        {DOORS.flatMap(([a, b]) => [a, b]).flatMap((x) =>
-          [Y0, Y0 + H].map((y) => <rect key={`dp${x}-${y}`} x={x - 0.9} y={y - 0.9} width="1.8" height="1.8" fill="#0b0b0b" stroke="#3a3a3a" strokeWidth="0.2" />),
-        )}
-      </g>
-
       {/* Floodlights */}
-      {lights.map(([x, y]) => (
+      {LIGHTS.map(([x, y]) => (
         <g key={`l${x}-${y}`}>
           <circle cx={x} cy={y} r="8" fill="url(#gpc-lamp)" opacity="0.45" />
           <rect x={x - 1.1} y={y - 1.1} width="2.2" height="2.2" rx="0.4" fill="#202020" />
@@ -228,48 +845,51 @@ export function CourtDrawing({ className }: { className?: string }) {
         </g>
       ))}
 
-      {/* Bench and spectators below the court */}
+      {/* Scoreboard on the fence */}
+      <g transform={`translate(${NET_SX} 22)`}>
+        <rect x="-30" y="-8" width="60" height="16" rx="3" fill="#0b0b0b" stroke="#2c2c2c" strokeWidth="0.5" />
+        <g fontFamily="Inter, sans-serif" fontWeight="700" textAnchor="middle">
+          <rect x="-26.5" y="-4.5" width="2.4" height="9" rx="1" fill="#ecebe6" />
+          <rect x="24.1" y="-4.5" width="2.4" height="9" rx="1" fill="#6e2626" />
+          <text ref={gamesL} x="-18" y="2.4" fontSize="6.5" fill="#a3a3a3">0</text>
+          <text ref={scoreL} x="-7.5" y="2.6" fontSize="8" fill="#f5f5f5">0</text>
+          <text x="0" y="2.2" fontSize="5" fill="#555">–</text>
+          <text ref={scoreR} x="7.5" y="2.6" fontSize="8" fill="#f5f5f5">0</text>
+          <text ref={gamesR} x="18" y="2.4" fontSize="6.5" fill="#a3a3a3">0</text>
+          <text x="0" y="-4.4" fontSize="2.4" fill="#c8f031" letterSpacing="0.4">GO PADEL</text>
+          <text ref={caption} x="0" y="12.8" fontSize="3.3" fill="#c8f031" letterSpacing="0.5" opacity="0" />
+        </g>
+      </g>
+
+      {/* Bench, bags and bottles below the court */}
       <rect x="62" y="181" width="176" height="5" rx="1" fill="#3b2e24" />
       <rect x="62" y="181" width="176" height="1" rx="0.5" fill="#5a4636" opacity="0.8" />
-      {BENCH.map((s) => (
-        <g key={`s${s.x}`} transform={`translate(${s.x} 182.5)`}>
-          <g className="gp-watch" style={{ animationDelay: `${s.delay}s` }}>
-            <g transform="rotate(-90)">
-              <Person look={s.look} seated />
-            </g>
-          </g>
+      <rect x="140" y="179.5" width="11" height="6" rx="2" fill="#26292e" />
+      <rect x="140.8" y="180.3" width="9.4" height="1.2" rx="0.6" fill="#c8f031" opacity="0.7" />
+      <rect x="154" y="180" width="10" height="5.5" rx="2" fill="#4a1f1f" />
+      {[133, 135.5, 167, 169.5].map((x) => (
+        <g key={`bt${x}`}>
+          <circle cx={x} cy="183.5" r="1.15" fill="#dfe6ee" opacity="0.85" />
+          <circle cx={x} cy="183.5" r="0.55" fill="#3b82c4" />
         </g>
       ))}
 
-      {/* Café table at the top right: two people with drinks */}
+      {/* Cafe table */}
       <circle cx="246" cy="18" r="4.2" fill="#d9d4c8" />
       <circle cx="246" cy="18" r="4.2" fill="url(#gpc-shade)" />
       <circle cx="244.8" cy="17" r="0.8" fill="#7a4b2a" />
       <circle cx="247.4" cy="19.2" r="0.8" fill="#c8f031" opacity="0.85" />
-      <g transform="translate(236.5 18)">
-        <g className="gp-watch" style={{ animationDelay: "-0.4s" }}>
-          <Person look={{ shirt: "#40464f", hair: "#1a1410", skin: "#b98a68", legs: "#20232a" }} seated />
-        </g>
-      </g>
-      <g transform="translate(255.5 18)">
-        <g className="gp-watch" style={{ animationDelay: "-0.9s" }}>
-          <g transform="rotate(180)">
-            <Person look={{ shirt: "#b8a68a", hair: "#3b2a1e", skin: "#c99a76", legs: "#33302b" }} seated />
-          </g>
-        </g>
-      </g>
 
-      {/* Two people standing by the glass at the top left, watching */}
-      {[
-        { x: 52, look: { shirt: "#2f3a4a", hair: "#15110e", skin: "#a8785a" }, d: -0.3 },
-        { x: 62, look: { shirt: "#e4e0d6", hair: "#6b4f35", skin: "#d2a684" }, d: -0.7 },
-      ].map((s) => (
-        <g key={`st${s.x}`} transform={`translate(${s.x} 30)`}>
-          <g className="gp-watch" style={{ animationDelay: `${s.d}s` }}>
-            <g transform="rotate(90)">
-              <Person look={s.look} />
-            </g>
-          </g>
+      {/* Spectators */}
+      {WATCHERS.map((w, i) => (
+        <g
+          key={`w${i}`}
+          ref={(el: SVGGElement | null) => {
+            watchers.current[i] = el;
+          }}
+          transform={`translate(${w.x} ${w.y}) rotate(${w.face})`}
+        >
+          <Person look={w.look} seated={w.seated} />
         </g>
       ))}
     </svg>
