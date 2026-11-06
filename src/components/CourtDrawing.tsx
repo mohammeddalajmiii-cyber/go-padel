@@ -656,6 +656,9 @@ export function CourtDrawing({ className }: { className?: string }) {
   const ball = useRef<SVGGElement | null>(null);
   const ballUp = useRef<SVGGElement | null>(null);
   const ballShadow = useRef<SVGEllipseElement | null>(null);
+  const heightLine = useRef<SVGLineElement | null>(null);
+  const trail = useRef<(SVGCircleElement | null)[]>([]);
+  const bounceRing = useRef<SVGCircleElement | null>(null);
   const glassFlash = useRef<SVGEllipseElement | null>(null);
   const netFlash = useRef<SVGLineElement | null>(null);
   const sideFlash = useRef<SVGEllipseElement | null>(null);
@@ -683,6 +686,7 @@ export function CourtDrawing({ className }: { className?: string }) {
     let visible = true;
     let frame = 0;
     let capAt = -99;
+    let history: V[] = []; // recent ball positions (drawing units, lifted by height) for the trail
     const facing: Record<PID, number> = { L1: 0, L2: 0, R1: 180, R2: 180 };
     const looks = WATCHERS.map((w) => w.face);
     // Running: smoothed velocity (m/s), stride phase, and the lean that comes with speed.
@@ -787,11 +791,58 @@ export function CourtDrawing({ className }: { className?: string }) {
       }
 
       // Ball: its spot on the ground (shadow) and its height (lifted and a touch larger).
+      // The shadow marks the spot on the ground; the ball is lifted above it by its height,
+      // joined by a thin dotted line when it's high, with a short trail showing where it's going.
+      const lift = { x: b.h * 1.1, y: -b.h * 2.2 };
       if (ball.current) {
         ball.current.setAttribute("opacity", ballOn ? "1" : "0");
         ball.current.setAttribute("transform", `translate(${sx(b.p.x).toFixed(2)} ${sy(b.p.y).toFixed(2)})`);
-        ballUp.current?.setAttribute("transform", `translate(${(b.h * 0.9).toFixed(2)} ${(-b.h * 1.5).toFixed(2)}) scale(${(1 + b.h * 0.08).toFixed(3)})`);
-        ballShadow.current?.setAttribute("opacity", (0.5 - Math.min(b.h, 5) * 0.07).toFixed(2));
+        ballUp.current?.setAttribute("transform", `translate(${lift.x.toFixed(2)} ${lift.y.toFixed(2)}) scale(${(1 + Math.min(b.h, 6) * 0.1).toFixed(3)})`);
+        const sh = ballShadow.current;
+        if (sh) {
+          sh.setAttribute("opacity", Math.max(0.14, 0.6 - Math.min(b.h, 5) * 0.09).toFixed(2));
+          sh.setAttribute("rx", (1.5 + Math.min(b.h, 5) * 0.28).toFixed(2));
+          sh.setAttribute("ry", (1.1 + Math.min(b.h, 5) * 0.2).toFixed(2));
+        }
+        const hl = heightLine.current;
+        if (hl) {
+          hl.setAttribute("x2", lift.x.toFixed(2));
+          hl.setAttribute("y2", (lift.y + 1.2).toFixed(2));
+          hl.setAttribute("opacity", clamp((b.h - 0.5) / 1.2, 0, 0.55).toFixed(2));
+        }
+      }
+      const here = { x: sx(b.p.x) + lift.x, y: sy(b.p.y) + lift.y };
+      const lastP = history[history.length - 1];
+      if (!ballOn || (lastP && Math.hypot(here.x - lastP.x, here.y - lastP.y) > 25)) history = [];
+      if (ballOn && dt > 0) history.push(here);
+      if (history.length > 16) history.shift();
+      trail.current.forEach((c, i) => {
+        if (!c) return;
+        const hp = history[history.length - 1 - (i + 1) * 2];
+        if (!hp) return c.setAttribute("opacity", "0");
+        c.setAttribute("cx", hp.x.toFixed(2));
+        c.setAttribute("cy", hp.y.toFixed(2));
+        c.setAttribute("opacity", (0.5 * (1 - i / 7)).toFixed(2));
+      });
+
+      // A ring on the turf where the ball bounces.
+      if (bounceRing.current) {
+        let ring = 0;
+        let at: V | null = null;
+        for (let i = 0; i < plan.segs.length - 1; i++) {
+          const sg = plan.segs[i];
+          const d = t - sg.t1;
+          if (sg.h1 === 0 && plan.segs[i + 1].h0 === 0 && d >= 0 && d < 0.5 && fromNet(sg.b.x) < 10.2) {
+            ring = d / 0.5;
+            at = sg.b;
+          }
+        }
+        if (at) {
+          bounceRing.current.setAttribute("cx", sx(at.x).toFixed(2));
+          bounceRing.current.setAttribute("cy", sy(at.y).toFixed(2));
+          bounceRing.current.setAttribute("r", (1.4 + ring * 4.5).toFixed(2));
+          bounceRing.current.setAttribute("opacity", (0.75 * (1 - ring)).toFixed(2));
+        } else bounceRing.current.setAttribute("opacity", "0");
       }
 
       // Glass and net flashes where the ball hits.
@@ -1002,12 +1053,28 @@ export function CourtDrawing({ className }: { className?: string }) {
         <rect key={`po${x}-${y}`} x={x - 0.9} y={y - 0.9} width="1.8" height="1.8" fill="#0b0b0b" stroke="#3a3a3a" strokeWidth="0.2" />
       ))}
 
-      {/* Ball */}
-      <g ref={ball} transform={`translate(${sx(serverHand.x)} ${sy(serverHand.y)})`}>
-        <ellipse ref={ballShadow} rx="1.3" ry="1" fill="#000" opacity="0.4" filter="url(#gpc-soft)" />
-        <g ref={ballUp} transform="translate(0.9 -1.5)">
-          <circle r="1.25" fill="#d7f43c" />
-          <circle cx="-0.4" cy="-0.4" r="0.45" fill="#fff" opacity="0.55" />
+      {/* Ball: bounce ring, trail, shadow on the ground, height line, and the ball itself */}
+      <circle ref={bounceRing} r="2" fill="none" stroke="#e9f7a6" strokeWidth="0.45" opacity="0" />
+      {Array.from({ length: 7 }, (_, i) => (
+        <circle
+          key={`tr${i}`}
+          ref={(el: SVGCircleElement | null) => {
+            trail.current[i] = el;
+          }}
+          r={(1.25 - i * 0.12).toFixed(2)}
+          fill="#d7f43c"
+          opacity="0"
+        />
+      ))}
+      <g ref={ball} transform={`translate(${sx(serverHand.x)} ${sy(serverHand.y)})`} opacity="0">
+        <ellipse ref={ballShadow} rx="1.5" ry="1.1" fill="#000" opacity="0.5" filter="url(#gpc-soft)" />
+        <line ref={heightLine} x1="0" y1="0" x2="0" y2="0" stroke="#ffffff" strokeWidth="0.3" strokeDasharray="0.7 0.7" opacity="0" />
+        <g ref={ballUp} transform="translate(1.1 -2.2)">
+          <circle r="2.5" fill="#c8f031" opacity="0.18" />
+          <circle r="1.65" fill="#dcf53f" stroke="#3f4a0e" strokeWidth="0.28" />
+          <path d="M-1.2 -1 Q -0.15 0 -1.2 1" fill="none" stroke="#ffffff" strokeWidth="0.3" opacity="0.85" />
+          <path d="M1.2 -1 Q 0.15 0 1.2 1" fill="none" stroke="#ffffff" strokeWidth="0.3" opacity="0.85" />
+          <circle cx="-0.55" cy="-0.6" r="0.5" fill="#fff" opacity="0.5" />
         </g>
       </g>
 
