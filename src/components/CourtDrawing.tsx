@@ -570,6 +570,51 @@ const TALKERS: Talker[] = [
   { x: 286.5, y: 107, group: 2, look: { shirt: "#d9d4c8", hair: "#3b2a1e", skin: "#a8785a", shorts: "#3c3a35", shoe: "#ffffff" } },
 ];
 const COURT_CENTRE: V = { x: sx(NETX), y: sy(5) };
+
+// Visitors: people who wander in, find a spot by the glass, watch, get bored, and leave.
+// Spots are where they stand (drawing units) with the way that faces the court and the way in/out.
+type Spot = { x: number; y: number; face: number; door: V };
+const SPOTS: Spot[] = [
+  { x: 52, y: 29, face: 90, door: { x: 28, y: -12 } },
+  { x: 63.5, y: 30, face: 90, door: { x: 28, y: -12 } },
+  { x: 21, y: 72, face: 0, door: { x: -12, y: 58 } },
+  { x: 21, y: 128, face: 0, door: { x: -12, y: 142 } },
+  { x: 281, y: 150, face: 180, door: { x: 312, y: 166 } },
+  { x: 281, y: 54, face: 180, door: { x: 312, y: 44 } },
+];
+// Pairs of spots side by side: friends sometimes arrive together.
+const NEXT_TO: Record<number, number> = { 0: 1, 1: 0 };
+const VISITORS: Look[] = [
+  { shirt: "#2f3a4a", hair: "#15110e", skin: "#a8785a", shorts: "#22252b", shoe: "#e8e8e6" },
+  { shirt: "#e4e0d6", hair: "#6b4f35", skin: "#d2a684", shorts: "#3a4a5e", shoe: "#ffffff" },
+  { shirt: "#5b3a5e", hair: "#1a1410", skin: "#8d5f43", shorts: "#1f2229", shoe: "#d9d6cf" },
+  { shirt: "#c46b3c", hair: "#2c2018", skin: "#c99a76", shorts: "#2a2d33", shoe: "#ffffff" },
+  { shirt: "#3e5f55", hair: "#9c7b52", skin: "#d2a684", shorts: "#3c3a35", shoe: "#e8e8e6" },
+  { shirt: "#1f2125", hair: "#120e0b", skin: "#b98a68", shorts: "#1b1d21", shoe: "#c8f031" },
+  { shirt: "#a9b4c2", hair: "#3b2a1e", skin: "#a8785a", shorts: "#2f3540", shoe: "#ffffff" },
+  { shirt: "#8a6d3b", hair: "#15110e", skin: "#c69a78", shorts: "#22252b", shoe: "#d9d6cf" },
+  { shirt: "#f0ede6", hair: "#4a3626", skin: "#8d5f43", shorts: "#3a4a5e", shoe: "#e8e8e6" },
+];
+const WALK = 16; // drawing units per second (about 1.3 m/s)
+type Visit = {
+  phase: "away" | "in" | "watch" | "bored" | "out";
+  spot: number;
+  pos: V;
+  from: V;
+  to: V;
+  t0: number;
+  t1: number;
+  until: number;
+  face: number;
+  phaseLeg: number;
+};
+/** Who's there when the page opens: three people already watching. */
+const firstVisits = (): Visit[] =>
+  VISITORS.map((_, i) => {
+    const sp = SPOTS[i];
+    if (i < 3) return { phase: "watch", spot: i, pos: { x: sp.x, y: sp.y }, from: { x: sp.x, y: sp.y }, to: { x: sp.x, y: sp.y }, t0: 0, t1: 0, until: 9 + i * 7, face: sp.face, phaseLeg: 0 };
+    return { phase: "away", spot: -1, pos: { x: -40, y: -40 }, from: { x: -40, y: -40 }, to: { x: -40, y: -40 }, t0: 0, t1: 0, until: 3 + i * 2.5, face: 0, phaseLeg: 0 };
+  });
 const angleTo = (from: V, to: V) => (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
 const turn = (from: number, to: number) => ((to - from + 540) % 360) - 180;
 
@@ -589,8 +634,6 @@ const WATCHERS: Watcher[] = [
   { x: 182, y: 182.5, face: -90, seated: true, follows: 0.7, look: { shirt: "#8a2f3a", hair: "#3b2a1e", skin: "#d2a684", legs: "#1f2229" } },
   { x: 204, y: 182.5, face: -90, seated: true, follows: 0.55, look: { shirt: "#e6e3dc", hair: "#1a1410", skin: "#a8785a", legs: "#2f3540" } },
   { x: 226, y: 182.5, face: -90, seated: true, follows: 0.7, look: { shirt: "#2d3036", hair: "#6b4f35", skin: "#c69a78", legs: "#1b1d21" } },
-  { x: 52, y: 29, face: 90, follows: 0.8, look: { shirt: "#2f3a4a", hair: "#15110e", skin: "#a8785a" } },
-  { x: 63, y: 30, face: 90, follows: 0.8, look: { shirt: "#e4e0d6", hair: "#6b4f35", skin: "#d2a684" } },
   { x: 236.5, y: 18, face: 0, seated: true, follows: 0.15, look: { shirt: "#40464f", hair: "#1a1410", skin: "#b98a68", legs: "#20232a" } },
   { x: 255.5, y: 18, face: 180, seated: true, follows: 0.35, look: { shirt: "#b8a68a", hair: "#3b2a1e", skin: "#c99a76", legs: "#33302b" } },
 ];
@@ -652,6 +695,7 @@ function Palm({ x, y, r }: { x: number; y: number; r: number }) {
 export function CourtDrawing({ className }: { className?: string }) {
   const players = useRef<Record<PID, SVGGElement | null>>({ L1: null, L2: null, R1: null, R2: null });
   const figs = useRef<Record<PID, FigRefs>>({ L1: newFig(), L2: newFig(), R1: newFig(), R2: newFig() });
+  const visitors = useRef<{ root: SVGGElement | null; shadow: SVGEllipseElement | null; fig: FigRefs }[]>(VISITORS.map(() => ({ root: null, shadow: null, fig: newFig() })));
   const talkers = useRef<{ root: SVGGElement | null; fig: FigRefs }[]>(TALKERS.map(() => ({ root: null, fig: newFig() })));
   const ball = useRef<SVGGElement | null>(null);
   const ballUp = useRef<SVGGElement | null>(null);
@@ -693,6 +737,14 @@ export function CourtDrawing({ className }: { className?: string }) {
     const motion = {} as Record<PID, { prev: V; v: V; phase: number; stride: number }>;
     for (const p of PIDS) motion[p] = { prev: { ...start[p] }, v: { x: 0, y: 0 }, phase: 0, stride: 0 };
     const talkFace = TALKERS.map((m) => angleTo(m, GROUPS[m.group]));
+    const visits = firstVisits();
+    const spotFreeAt = SPOTS.map((_, i) => (i < 3 ? Infinity : 4 + i * 3)); // when each empty spot can take someone new
+    const walkTo = (v: Visit, to: V, now: number) => {
+      v.from = { ...v.pos };
+      v.to = to;
+      v.t0 = now;
+      v.t1 = now + dist(v.from, to) / WALK;
+    };
 
     const io = new IntersectionObserver(([e]) => (visible = e.isIntersecting));
     if (root.current) io.observe(root.current);
@@ -878,6 +930,95 @@ export function CourtDrawing({ className }: { className?: string }) {
         }
         looks[i] += (want - looks[i]) * 0.06;
         watchers.current[i]?.setAttribute("transform", `translate(${w.x} ${w.y}) rotate(${looks[i].toFixed(1)})`);
+      });
+
+      // Visitors: arrive, watch the ball, get bored (look away, check their phone), leave; someone new comes.
+      const taken = new Set(visits.filter((v) => v.phase !== "away").map((v) => v.spot));
+      SPOTS.forEach((sp, si) => {
+        if (taken.has(si) || t < spotFreeAt[si]) return;
+        const idle = visits.map((v, i) => [v, i] as const).filter(([v]) => v.phase === "away" && t >= v.until);
+        if (!idle.length) return;
+        const [v] = idle[Math.floor(Math.random() * idle.length)];
+        v.phase = "in";
+        v.spot = si;
+        v.pos = { ...sp.door };
+        walkTo(v, sp, t);
+        taken.add(si);
+        // Now and then a friend comes along to the spot beside them.
+        const nb = NEXT_TO[si];
+        if (nb !== undefined && !taken.has(nb) && Math.random() < 0.5) {
+          const friend = visits.find((w) => w.phase === "away" && w !== v && t >= w.until);
+          if (friend) {
+            friend.phase = "in";
+            friend.spot = nb;
+            friend.pos = { x: sp.door.x - 6, y: sp.door.y - 4 };
+            walkTo(friend, SPOTS[nb], t);
+            taken.add(nb);
+          }
+        }
+      });
+      visits.forEach((v, i) => {
+        const r = visitors.current[i];
+        if (v.phase === "away") {
+          r.root?.setAttribute("opacity", "0");
+          r.shadow?.setAttribute("opacity", "0");
+          return;
+        }
+        const sp = SPOTS[v.spot];
+        let moving = false;
+        if (v.phase === "in" || v.phase === "out") {
+          const u = clamp((t - v.t0) / Math.max(0.01, v.t1 - v.t0), 0, 1);
+          v.pos = { x: lerp(v.from.x, v.to.x, u), y: lerp(v.from.y, v.to.y, u) };
+          moving = u < 1;
+          if (moving) v.face += turn(v.face, angleTo(v.from, v.to)) * 0.2;
+          if (!moving && v.phase === "in") {
+            v.phase = "watch";
+            v.until = t + rand(14, 36);
+          }
+          if (!moving && v.phase === "out") {
+            v.phase = "away";
+            v.until = t + rand(4, 14);
+            spotFreeAt[v.spot] = t + rand(2, 7);
+            v.spot = -1;
+            return;
+          }
+        }
+        let arm = -4 + 3 * Math.sin(t * 0.8 + i);
+        let nod = 0;
+        if (v.phase === "watch") {
+          // Follow the ball, a little lazily.
+          const toBall = ballOn ? angleTo(v.pos, { x: sx(b.p.x), y: sy(b.p.y) }) : sp.face;
+          v.face += turn(v.face, sp.face + clamp(turn(sp.face, toBall), -55, 55) * 0.8) * 0.06;
+          if (t >= v.until) {
+            v.phase = "bored";
+            v.until = t + rand(2.5, 5);
+          }
+        } else if (v.phase === "bored") {
+          // Looks away and checks their phone, then heads off.
+          v.face += turn(v.face, sp.face + 70 * (i % 2 ? 1 : -1)) * 0.04;
+          arm = -78;
+          nod = -0.35;
+          if (t >= v.until) {
+            v.phase = "out";
+            walkTo(v, sp.door, t);
+          }
+        }
+        const speed = moving ? WALK / S : 0; // m/s
+        v.phaseLeg += speed * dt * 3.1;
+        const step = Math.sin(v.phaseLeg) * clamp(speed * 0.8, 0, 3.4);
+        const shift = moving ? 0 : Math.sin(t * 0.9 + i * 2.1) * 0.35;
+        r.root?.setAttribute("opacity", "1");
+        r.root?.setAttribute("transform", `translate(${v.pos.x.toFixed(2)} ${v.pos.y.toFixed(2)}) rotate(${v.face.toFixed(1)})`);
+        r.shadow?.setAttribute("opacity", "0.4");
+        r.shadow?.setAttribute("cx", (v.pos.x + 1.8).toFixed(2));
+        r.shadow?.setAttribute("cy", (v.pos.y + 2.2).toFixed(2));
+        pose(r.fig, {
+          fl: { x: 1.35 + step + shift * 0.4, y: -1.1 },
+          fr: { x: 1.35 - step - shift * 0.4, y: 1.1 },
+          bend: moving ? 0.06 : 0.02,
+          arm,
+          nod,
+        });
       });
 
       // Groups chatting: one talks with their hands while the others nod; they all turn to look when a point ends.
@@ -1121,6 +1262,37 @@ export function CourtDrawing({ className }: { className?: string }) {
       <circle cx="246" cy="18" r="4.2" fill="url(#gpc-shade)" />
       <circle cx="244.8" cy="17" r="0.8" fill="#7a4b2a" />
       <circle cx="247.4" cy="19.2" r="0.8" fill="#c8f031" opacity="0.85" />
+
+      {/* Visitors who come and go */}
+      {VISITORS.map((look, i) => {
+        const v0 = firstVisits()[i];
+        const on = v0.phase !== "away";
+        return (
+          <g key={`v${i}`}>
+            <ellipse
+              ref={(el: SVGEllipseElement | null) => {
+                visitors.current[i].shadow = el;
+              }}
+              cx={v0.pos.x + 1.8}
+              cy={v0.pos.y + 2.2}
+              rx="4.4"
+              ry="4.1"
+              fill="#000"
+              opacity={on ? 0.4 : 0}
+              filter="url(#gpc-soft)"
+            />
+            <g
+              ref={(el: SVGGElement | null) => {
+                visitors.current[i].root = el;
+              }}
+              transform={`translate(${v0.pos.x} ${v0.pos.y}) rotate(${v0.face})`}
+              opacity={on ? 1 : 0}
+            >
+              <Figure look={look} r={visitors.current[i].fig} />
+            </g>
+          </g>
+        );
+      })}
 
       {/* People standing and chatting */}
       {TALKERS.map((m, i) => (
