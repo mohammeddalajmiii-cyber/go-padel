@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { BookingFlow } from "@/components/BookingFlow";
+import { BookingSteps } from "@/components/BookingSteps";
 import { bookableRange } from "@/lib/bookings";
-import { isLang, t } from "@/lib/i18n";
+import { fill, isLang, t } from "@/lib/i18n";
 import { getSettings } from "@/lib/settings";
-import { isDate } from "@/lib/time";
+import { formatTime, isDate } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,11 @@ export default async function BookPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 pt-10 md:px-8 md:pt-14">
-      <h1 className="gp-display text-5xl md:text-6xl">{t(locale).book.title}</h1>
+      <BookingSteps lang={locale} current={0} />
+      <h1 className="gp-display mt-8 text-5xl md:text-6xl">{t(locale).book.title}</h1>
+      <p className="mt-4 text-dim">
+        {fill(t(locale).home.hours, { open: formatTime(s.open_minute, locale), close: formatTime(s.close_minute, locale) })}
+      </p>
       <BookingFlow
         lang={locale}
         initialDate={date}
@@ -41,6 +46,7 @@ export default async function BookPage({
         days={s.days_ahead}
         hours={{ open_minute: s.open_minute, close_minute: s.close_minute }}
         prices={{ price_30: s.price_30, price_60: s.price_60, deposit_30: s.deposit_30, deposit_60: s.deposit_60 }}
+        holdMinutes={s.hold_minutes}
       />
     </div>
   );

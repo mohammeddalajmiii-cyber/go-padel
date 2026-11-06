@@ -6,6 +6,7 @@ import { durationLabel, fill, isLang, num, t } from "@/lib/i18n";
 import { priceFor } from "@/lib/pricing";
 import { getSettings } from "@/lib/settings";
 import { addDays, businessNow, formatTime } from "@/lib/time";
+import { Icon, type IconName } from "@/components/Icon";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +38,17 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
   const titleA = cut > 0 ? h.title.slice(0, cut + 1) : h.title;
   const titleB = cut > 0 ? h.title.slice(cut + 2) : "";
 
-  const prices = [
-    { label: h.min30, price: s.price_30, deposit: s.deposit_30, featured: false },
-    { label: h.min60, price: s.price_60, deposit: s.deposit_60, featured: true },
+  const e = d.extra;
+  const hours = `${formatTime(s.open_minute, lang)} – ${formatTime(s.close_minute, lang)}`;
+  const facts: { icon: IconName; label: string; value: string }[] = [
+    { icon: "clock", label: e.facts.open, value: hours },
+    { icon: "calendar", label: e.facts.ahead, value: fill(e.facts.aheadValue, { days: num(s.days_ahead, lang) }) },
+    { icon: "hourglass", label: e.facts.hold, value: fill(e.facts.holdValue, { hold }) },
+    { icon: "wallet", label: e.facts.from, value: `${fill(e.facts.fromValue, { price: num(s.price_30, lang) })} · ${durationLabel(30, lang)}` },
   ];
+  const steps: IconName[] = ["calendar", "wallet", "checkCircle", "ball"];
+  const ruleIcons: IconName[] = ["info", "shield", "hourglass"];
+  const lengths = [30, 60, 90, 120, 240, 480];
 
   return (
     <>
@@ -110,97 +118,214 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         </div>
       </section>
 
-      <div className="mx-auto max-w-6xl space-y-24 px-4 pt-12 md:px-8">
-        {/* Prices */}
-        <section id="prices" className="scroll-mt-8">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <h2 className="gp-display text-4xl md:text-5xl">{h.pricesTitle}</h2>
-            <p className="text-dim">
-              {fill(h.hours, { open: formatTime(s.open_minute, lang), close: formatTime(s.close_minute, lang) })}
-            </p>
-          </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {prices.map((p) => (
-              <div
-                key={p.label}
-                className={`flex flex-col gap-4 rounded-3xl p-7 ${p.featured ? "bg-lime text-night" : "border border-edge bg-surface"}`}
-              >
-                <span className={`text-sm font-bold uppercase tracking-[0.14em] rtl:tracking-normal ${p.featured ? "text-night/70" : "text-dim"}`}>
-                  {p.label}
-                </span>
-                <span className="gp-figure text-5xl">
-                  {num(p.price, lang)} <span className="text-lg font-semibold">{h.egp}</span>
-                </span>
-                <span className={p.featured ? "text-night/75" : "text-dim"}>
-                  {h.deposit}: {num(p.deposit, lang)} {h.egp}
-                </span>
+      {/* Key facts, overlapping the bottom of the hero */}
+      <section className="relative z-10 mx-auto -mt-6 max-w-6xl px-4 md:-mt-10 md:px-8" aria-label={d.place}>
+        <dl className="grid grid-cols-2 overflow-hidden rounded-3xl border border-edge bg-surface/95 backdrop-blur lg:grid-cols-4">
+          {facts.map((f, i) => (
+            <div key={f.label} className={`flex items-start gap-3 p-5 md:p-6 ${i % 2 ? "border-s border-edge" : ""} ${i > 1 ? "border-t border-edge lg:border-t-0" : ""} ${i === 2 ? "lg:border-s" : ""}`}>
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-lime/10 text-lime ring-1 ring-lime/25">
+                <Icon name={f.icon} size={19} />
+              </span>
+              <div className="min-w-0">
+                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-dim rtl:tracking-normal">{f.label}</dt>
+                <dd className="mt-1 font-semibold leading-snug">{f.value}</dd>
               </div>
-            ))}
-
-            {/* 1½ to 4 hours, priced from the hourly and half-hour rates */}
-            <div className="flex flex-col gap-4 rounded-3xl border border-edge bg-surface p-7">
-              <span className="text-sm font-bold uppercase tracking-[0.14em] text-dim rtl:tracking-normal">{h.longerTitle}</span>
-              <dl className="divide-y divide-edge">
-                {[90, 120, 240, 480].map((m) => (
-                  <div key={m} className="flex items-baseline justify-between gap-4 py-2">
-                    <dt className="font-semibold">{durationLabel(m, lang)}</dt>
-                    <dd className="gp-figure text-xl">
-                      {num(priceFor(s, m).total, lang)} <span className="text-sm font-semibold text-dim">{h.egp}</span>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <span className="text-sm text-dim">{h.longerText}</span>
             </div>
-          </div>
-        </section>
+          ))}
+        </dl>
+      </section>
 
-        {/* How booking works: a real sequence, so it's numbered */}
+      <div className="mx-auto max-w-6xl space-y-28 px-4 pt-24 md:px-8">
+        {/* How booking works */}
         <section>
-          <h2 className="gp-display text-4xl md:text-5xl">{h.howTitle}</h2>
-          <ol className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Eyebrow>{e.eyebrow.how}</Eyebrow>
+          <div className="mt-4 flex flex-wrap items-end justify-between gap-6">
+            <h2 className="gp-display max-w-xl text-4xl md:text-5xl">{h.howTitle}</h2>
+            <p className="max-w-sm text-dim">{e.howLead}</p>
+          </div>
+          <ol className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {h.steps.map((step, i) => (
-              <li key={step.t} className="flex flex-col gap-3 rounded-3xl border border-edge bg-surface p-6">
-                <span className="gp-figure text-5xl leading-none text-lime">{lang === "ar" ? num(i + 1, lang) : `0${i + 1}`}</span>
-                <h3 className="mt-2 text-lg font-bold">{step.t}</h3>
-                <p className="leading-relaxed text-dim">{fill(step.d, { hold })}</p>
+              <li key={step.t} className="group relative flex flex-col rounded-3xl border border-edge bg-surface p-6 transition-colors hover:border-lime/40">
+                <div className="flex items-center justify-between">
+                  <span className="grid size-12 place-items-center rounded-2xl bg-raised text-lime ring-1 ring-edge transition-colors group-hover:ring-lime/40">
+                    <Icon name={steps[i]} size={22} />
+                  </span>
+                  <span className="gp-figure text-4xl leading-none text-chalk/10">{lang === "ar" ? num(i + 1, lang) : `0${i + 1}`}</span>
+                </div>
+                <h3 className="mt-6 text-lg font-bold">{step.t}</h3>
+                <p className="mt-2 leading-relaxed text-dim">{fill(step.d, { hold })}</p>
               </li>
             ))}
           </ol>
         </section>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Rules */}
-          <section className="rounded-3xl border border-edge bg-surface p-7">
-            <h2 className="gp-display text-3xl md:text-4xl">{h.rulesTitle}</h2>
-            <ul className="mt-6 space-y-4">
-              {h.rules.map((r) => (
-                <li key={r} className="flex gap-3 leading-relaxed">
-                  <span aria-hidden className="mt-2.5 size-2 shrink-0 rounded-full bg-lime" />
-                  {fill(r, { hold })}
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* Find us */}
-          <section className="overflow-hidden rounded-3xl border border-edge bg-surface">
-            <div className="gp-photo h-40" aria-hidden />
-            <div className="p-7">
-              <h2 className="gp-display text-3xl md:text-4xl">{h.findTitle}</h2>
-              <p className="mt-3 leading-relaxed text-chalk/85">{h.findText}</p>
-              <a
-                href={MAPS}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-5 inline-flex min-h-12 items-center rounded-full border border-edge px-6 font-semibold hover:border-chalk"
-              >
-                {h.map}
-              </a>
+        {/* Prices */}
+        <section id="prices" className="scroll-mt-24 grid gap-10 lg:grid-cols-[1fr_1.15fr] lg:items-start">
+          <div>
+            <Eyebrow>{e.eyebrow.prices}</Eyebrow>
+            <h2 className="gp-display mt-4 text-4xl md:text-5xl">{h.pricesTitle}</h2>
+            <p className="mt-5 max-w-md text-lg leading-relaxed text-dim">{e.pricesLead}</p>
+            <div className="mt-8 grid max-w-md grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-lime p-5 text-night">
+                <span className="text-sm font-semibold text-night/70">{durationLabel(30, lang)}</span>
+                <span className="gp-figure mt-1 block text-4xl">{num(s.price_30, lang)}</span>
+                <span className="text-sm font-semibold text-night/70">{h.egp}</span>
+              </div>
+              <div className="rounded-2xl border border-edge bg-surface p-5">
+                <span className="text-sm font-semibold text-dim">{durationLabel(60, lang)}</span>
+                <span className="gp-figure mt-1 block text-4xl">{num(s.price_60, lang)}</span>
+                <span className="text-sm font-semibold text-dim">{h.egp}</span>
+              </div>
             </div>
-          </section>
-        </div>
+            <p className="mt-5 flex items-center gap-2 text-sm text-dim">
+              <Icon name="clock" size={16} className="text-lime" />
+              {fill(h.hours, { open: formatTime(s.open_minute, lang), close: formatTime(s.close_minute, lang) })}
+            </p>
+          </div>
+          <div className="overflow-hidden rounded-3xl border border-edge bg-surface">
+            <table className="w-full text-start">
+              <thead>
+                <tr className="border-b border-edge text-xs uppercase tracking-[0.12em] text-dim rtl:tracking-normal">
+                  <th scope="col" className="px-6 py-4 text-start font-semibold">{e.length}</th>
+                  <th scope="col" className="px-6 py-4 text-end font-semibold">{e.total}</th>
+                  <th scope="col" className="px-6 py-4 text-end font-semibold">{h.deposit}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-edge">
+                {lengths.map((m) => {
+                  const p = priceFor(s, m);
+                  return (
+                    <tr key={m} className="transition-colors hover:bg-raised/60">
+                      <th scope="row" className="px-6 py-4 text-start font-semibold">{durationLabel(m, lang)}</th>
+                      <td className="px-6 py-4 text-end">
+                        <span className="gp-figure text-xl">{num(p.total, lang)}</span> <span className="text-sm text-dim">{h.egp}</span>
+                      </td>
+                      <td className="px-6 py-4 text-end text-dim">
+                        {num(p.deposit, lang)} {h.egp}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="flex items-center justify-between gap-4 border-t border-edge bg-raised/50 px-6 py-4">
+              <p className="text-sm text-dim">{h.longerText}</p>
+              <Link href={`/${lang}/book`} className="inline-flex shrink-0 items-center gap-2 text-sm font-bold text-lime hover:text-lime-hi">
+                {h.cta}
+                <Arrow />
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* Good to know */}
+        <section>
+          <Eyebrow>{e.eyebrow.rules}</Eyebrow>
+          <h2 className="gp-display mt-4 text-4xl md:text-5xl">{h.rulesTitle}</h2>
+          <ul className="mt-10 grid gap-4 md:grid-cols-3">
+            {h.rules.map((r, i) => (
+              <li key={r} className="flex gap-4 rounded-3xl border border-edge bg-surface p-6">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-raised text-lime ring-1 ring-edge">
+                  <Icon name={ruleIcons[i % ruleIcons.length]} size={19} />
+                </span>
+                <span className="pt-1.5 leading-relaxed">{fill(r, { hold })}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* Questions */}
+        <section id="faq" className="scroll-mt-24 grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
+          <div>
+            <Eyebrow>{e.eyebrow.faq}</Eyebrow>
+            <h2 className="gp-display mt-4 text-4xl md:text-5xl">{e.faqTitle}</h2>
+          </div>
+          <div className="divide-y divide-edge overflow-hidden rounded-3xl border border-edge bg-surface">
+            {e.faq.map((f) => (
+              <details key={f.q} className="group">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 font-semibold transition-colors hover:bg-raised/50 [&::-webkit-details-marker]:hidden">
+                  {f.q}
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-raised text-lime transition-transform group-open:rotate-45">
+                    <Icon name="plus" size={16} strokeWidth={2.2} />
+                  </span>
+                </summary>
+                <p className="px-6 pb-6 leading-relaxed text-dim">{fill(f.a, { hold })}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        {/* Find us */}
+        <section id="find" className="scroll-mt-24 grid overflow-hidden rounded-3xl border border-edge bg-surface lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="flex flex-col p-7 md:p-10">
+            <Eyebrow>{e.eyebrow.find}</Eyebrow>
+            <h2 className="gp-display mt-4 text-4xl md:text-5xl">{h.findTitle}</h2>
+            <dl className="mt-8 space-y-5">
+              <div className="flex gap-4">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-raised text-lime ring-1 ring-edge">
+                  <Icon name="pin" size={19} />
+                </span>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-dim rtl:tracking-normal">{e.footerVisit}</dt>
+                  <dd className="mt-1 font-semibold">{h.findText}</dd>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-raised text-lime ring-1 ring-edge">
+                  <Icon name="clock" size={19} />
+                </span>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-dim rtl:tracking-normal">{e.footerHours}</dt>
+                  <dd className="mt-1 font-semibold">
+                    {e.daily} · {hours}
+                  </dd>
+                </div>
+              </div>
+            </dl>
+            <a
+              href={MAPS}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-8 inline-flex min-h-12 items-center gap-2 self-start rounded-full border border-edge px-6 font-semibold transition-colors hover:border-chalk"
+            >
+              <Icon name="map" size={18} />
+              {e.directions}
+            </a>
+          </div>
+          <div className="relative min-h-72 border-t border-edge lg:border-s lg:border-t-0">
+            <iframe
+              title={h.findText}
+              src="https://www.google.com/maps?q=Avenue+Mall+Rehab+City&output=embed"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              className="absolute inset-0 size-full border-0 [filter:grayscale(1)_invert(0.9)_contrast(0.9)_brightness(0.95)]"
+            />
+          </div>
+        </section>
+
+        {/* Closing call to book */}
+        <section className="relative overflow-hidden rounded-3xl border border-edge">
+          <div className="gp-photo absolute inset-0" aria-hidden />
+          <div className="absolute inset-0 bg-linear-to-r from-night via-night/85 to-night/40 rtl:bg-linear-to-l" aria-hidden />
+          <div className="relative flex flex-col items-start gap-6 p-8 md:p-14">
+            <h2 className="gp-display max-w-2xl text-4xl md:text-6xl">{e.ctaTitle}</h2>
+            <p className="max-w-md text-lg text-chalk/80">{e.ctaText}</p>
+            <Link href={`/${lang}/book`} className="inline-flex items-center gap-2.5 rounded-full bg-lime px-7 py-4 text-base font-bold text-night transition-colors hover:bg-lime-hi">
+              {h.cta}
+              <Arrow />
+            </Link>
+          </div>
+        </section>
       </div>
     </>
+  );
+}
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="flex items-center gap-3 text-xs font-bold uppercase tracking-[0.18em] text-lime rtl:text-sm rtl:tracking-normal">
+      <span aria-hidden className="h-px w-8 bg-lime/60" />
+      {children}
+    </p>
   );
 }
