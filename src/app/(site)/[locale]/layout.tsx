@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import "../../globals.css";
-import { FontLinks } from "@/components/FontLinks";
 import { LangSwitch } from "@/components/LangSwitch";
+import { Logo } from "@/components/Logo";
+import { SiteFontLinks } from "@/components/SiteFontLinks";
 import { LANGS, isLang, t } from "@/lib/i18n";
 
 export function generateStaticParams() {
@@ -33,21 +34,20 @@ export default async function SiteLayout({
   return (
     <html lang={locale} dir={d.dir}>
       <head>
-        <FontLinks />
-        <meta name="theme-color" content="#11307c" />
+        <SiteFontLinks />
+        <meta name="theme-color" content="#0a0a0a" />
       </head>
-      <body className="min-h-dvh">
-        <header className="bg-court-deep text-court-line">
-          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
-            <Link href={`/${locale}`} className="flex items-center gap-2 text-lg font-semibold tracking-tight" dir="ltr">
-              <span aria-hidden className="inline-block size-4 rounded-full bg-ball shadow-[inset_-3px_-3px_0_rgba(0,0,0,0.12)]" />
-              Go Padel
+      <body className="gp-site min-h-dvh">
+        <header className="relative z-20 border-b border-white/10">
+          <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 md:px-8">
+            <Link href={`/${locale}`} aria-label="Go Padel">
+              <Logo size={40} />
             </Link>
-            <nav className="flex items-center gap-1">
+            <nav className="flex items-center gap-2">
               <LangSwitch lang={locale} label={d.switchLang} />
               <Link
                 href={`/${locale}/book`}
-                className="rounded-chip bg-ball px-4 py-2 text-sm font-semibold text-ink hover:bg-ball-deep"
+                className="inline-flex min-h-11 items-center rounded-full bg-lime px-5 text-sm font-bold text-night hover:bg-lime-hi"
               >
                 {d.nav.book}
               </Link>
@@ -55,10 +55,12 @@ export default async function SiteLayout({
           </div>
         </header>
         <main>{children}</main>
-        <footer className="mt-16 border-t border-line">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-6 text-sm text-muted">
-            <span dir="ltr">Go Padel</span>
-            <span>{d.place}</span>
+        <footer className="mt-20 border-t border-edge">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-dim md:px-8">
+            <Logo size={32} />
+            <span>
+              {d.place} · © {new Date().getFullYear()} Go Padel
+            </span>
           </div>
         </footer>
       </body>

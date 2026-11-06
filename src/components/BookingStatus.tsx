@@ -71,13 +71,13 @@ export function BookingStatus({ lang, code }: { lang: Lang; code: string }) {
     return () => clearInterval(id);
   }, [data?.status, refresh]);
 
-  if (missing) return <p className="rounded-panel bg-white p-6">{st.notFound}</p>;
-  if (!data) return <p className="text-muted">{d.book.loading}</p>;
+  if (missing) return <p className="rounded-3xl border border-edge bg-surface p-6">{st.notFound}</p>;
+  if (!data) return <p className="text-dim">{d.book.loading}</p>;
 
   const when = (
     <>
       <span className="block font-semibold">{formatDate(data.date, lang)}</span>
-      <span className="block text-muted">
+      <span className="block text-dim">
         {formatTime(data.start, lang)} – {formatTime(data.start + data.duration, lang)}
         {" · "}
         {data.duration === 30 ? d.home.min30 : d.home.min60}
@@ -87,14 +87,14 @@ export function BookingStatus({ lang, code }: { lang: Lang; code: string }) {
   const egp = d.home.egp;
 
   const closed = (title: string, text: string, tone: "bad" | "muted", extra?: React.ReactNode) => (
-    <section className="rounded-panel border border-line bg-white p-6">
-      <h2 className={`text-2xl font-semibold ${tone === "bad" ? "text-bad" : ""}`}>{title}</h2>
+    <section className="rounded-3xl border border-edge bg-surface p-6">
+      <h2 className={`text-2xl font-bold ${tone === "bad" ? "text-alert" : ""}`}>{title}</h2>
       <p className="mt-3 leading-relaxed">{text}</p>
       {extra}
-      <div className="mt-5 border-t border-line pt-5">{when}</div>
+      <div className="mt-5 border-t border-edge pt-5">{when}</div>
       <Link
         href={`/${lang}/book`}
-        className="mt-6 inline-block rounded-chip bg-ball px-5 py-3 font-semibold text-ink hover:bg-ball-deep"
+        className="mt-6 inline-flex min-h-12 items-center rounded-full bg-lime px-6 font-bold text-night hover:bg-lime-hi"
       >
         {st.bookAgain}
       </Link>
@@ -107,16 +107,16 @@ export function BookingStatus({ lang, code }: { lang: Lang; code: string }) {
 
     case "reviewing":
       return (
-        <section className="rounded-panel border border-line bg-white p-6">
+        <section className="rounded-3xl border border-edge bg-surface p-6">
           <div className="flex items-center gap-3">
-            <span className="gp-pulse size-3 rounded-full bg-court" aria-hidden />
-            <h2 className="text-2xl font-semibold">{st.reviewingTitle}</h2>
+            <span className="gp-pulse size-3 rounded-full bg-lime" aria-hidden />
+            <h2 className="text-2xl font-bold">{st.reviewingTitle}</h2>
           </div>
-          <p className="mt-3 leading-relaxed text-muted" role="status">
+          <p className="mt-3 leading-relaxed text-dim" role="status">
             {st.reviewingText}
           </p>
-          <div className="mt-5 border-t border-line pt-5">{when}</div>
-          <p className="mt-5 text-sm text-muted">{st.keepLink}</p>
+          <div className="mt-5 border-t border-edge pt-5">{when}</div>
+          <p className="mt-5 text-sm text-dim">{st.keepLink}</p>
         </section>
       );
 
@@ -124,23 +124,23 @@ export function BookingStatus({ lang, code }: { lang: Lang; code: string }) {
     case "paid": {
       const paid = data.status === "paid";
       return (
-        <section className="overflow-hidden rounded-panel bg-court-deep text-court-line" role="status">
-          <div className="p-6">
-            <span className="grid size-12 place-items-center rounded-full bg-ball text-2xl text-ink" aria-hidden>
-              ✓
+        <section className="overflow-hidden rounded-3xl border border-edge bg-surface" role="status">
+          <div className="bg-raised p-6 sm:p-8">
+            <span className="grid size-14 place-items-center rounded-full bg-lime text-night" aria-hidden>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
             </span>
-            <h2 className="mt-4 text-3xl font-semibold">{paid ? st.paidTitle : st.confirmedTitle}</h2>
-            <p className="mt-2 leading-relaxed text-court-line/85">
+            <h2 className="gp-display mt-5 text-4xl">{paid ? st.paidTitle : st.confirmedTitle}</h2>
+            <p className="mt-3 leading-relaxed text-chalk/85">
               {paid ? st.paidText : fill(st.confirmedText, { amount: num(data.remaining, lang) })}
             </p>
           </div>
-          <div className="bg-white p-6 text-ink">
+          <div className="p-6 sm:p-8">
             {when}
             <dl className="mt-4 space-y-1.5 text-sm">
               <Row label={st.total} value={`${num(data.total, lang)} ${egp}`} />
               {!paid && <Row label={st.remaining} value={`${num(data.remaining, lang)} ${egp}`} strong />}
             </dl>
-            <p className="mt-5 text-sm text-muted">{st.keepLink}</p>
+            <p className="mt-5 text-sm text-dim">{st.keepLink}</p>
           </div>
         </section>
       );
@@ -152,7 +152,7 @@ export function BookingStatus({ lang, code }: { lang: Lang; code: string }) {
         st.rejectedText,
         "bad",
         data.rejectReason ? (
-          <p className="mt-3 rounded-chip bg-bad-soft px-4 py-3 text-bad">
+          <p className="mt-3 rounded-xl bg-alert-bg px-4 py-3 text-alert">
             {st.reason}: {data.rejectReason}
           </p>
         ) : null,
@@ -167,7 +167,7 @@ export function BookingStatus({ lang, code }: { lang: Lang; code: string }) {
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-muted">{label}</dt>
+      <dt className="text-dim">{label}</dt>
       <dd className={strong ? "font-semibold" : ""}>{value}</dd>
     </div>
   );
@@ -250,21 +250,21 @@ function PayDeposit({
   return (
     <div className="space-y-5">
       <p
-        className={`rounded-chip px-4 py-3 font-medium ${urgent ? "bg-bad-soft text-bad" : "bg-warn-soft text-warn"}`}
+        className={`rounded-2xl px-4 py-3 font-semibold ${urgent ? "bg-alert-bg text-alert" : "bg-caution-bg text-caution"}`}
         role="timer"
         aria-live={urgent ? "polite" : "off"}
       >
         {fill(st.timer, { time: clock })}
       </p>
 
-      <section className="rounded-panel border border-line bg-white p-6">
-        <h2 className="text-sm font-medium text-muted">{st.summary}</h2>
+      <section className="rounded-3xl border border-edge bg-surface p-6">
+        <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-dim rtl:text-sm rtl:tracking-normal">{st.summary}</h2>
         <div className="mt-2">{when}</div>
-        <dl className="mt-5 space-y-2 border-t border-line pt-5">
+        <dl className="mt-5 space-y-2 border-t border-edge pt-5">
           <Row label={st.total} value={`${num(data.total, lang)} ${egp}`} />
-          <div className="flex items-baseline justify-between gap-4 rounded-chip bg-ball/40 px-3 py-2.5">
+          <div className="flex items-baseline justify-between gap-4 rounded-xl bg-lime px-3.5 py-3 text-night">
             <dt className="font-semibold">{st.depositNow}</dt>
-            <dd className="text-2xl font-semibold">
+            <dd className="gp-figure text-2xl">
               {num(data.deposit, lang)} <span className="text-base">{egp}</span>
             </dd>
           </div>
@@ -272,12 +272,12 @@ function PayDeposit({
         </dl>
       </section>
 
-      <section className="rounded-panel border border-line bg-white p-6">
-        <h2 className="text-xl font-semibold">{st.payTitle}</h2>
+      <section className="rounded-3xl border border-edge bg-surface p-6">
+        <h2 className="text-xl font-bold">{st.payTitle}</h2>
         <ol className="mt-4 space-y-2.5">
           {[fill(st.payStep1, { amount: num(data.deposit, lang) }), st.payStep2, st.payStep3].map((step, i) => (
             <li key={i} className="flex gap-3">
-              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-court text-sm font-semibold text-court-line">
+              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-lime text-sm font-bold text-night">
                 {num(i + 1, lang)}
               </span>
               <span className="pt-0.5">{step}</span>
@@ -290,26 +290,26 @@ function PayDeposit({
             href={data.instapayLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-6 flex w-full items-center justify-center rounded-chip bg-court px-6 py-4 text-base font-semibold text-court-line hover:bg-court-deep"
+            className="mt-6 flex w-full items-center justify-center rounded-full bg-chalk px-6 py-4 text-base font-bold text-night hover:bg-white"
           >
             {st.openInstapay}
           </a>
         )}
         {data.instapayAddress && (
-          <div className="mt-4 flex items-center justify-between gap-3 rounded-chip bg-glass px-4 py-3">
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-raised px-4 py-3">
             <div className="min-w-0">
-              <span className="block text-xs text-muted">{st.instapayAddress}</span>
+              <span className="block text-xs text-dim">{st.instapayAddress}</span>
               <span className="block truncate font-semibold" dir="ltr">
                 {data.instapayAddress}
               </span>
             </div>
-            <button type="button" onClick={copy} className="shrink-0 rounded-chip border border-line bg-white px-3 py-1.5 text-sm font-medium">
+            <button type="button" onClick={copy} className="min-h-10 shrink-0 rounded-full border border-edge bg-surface px-4 text-sm font-semibold hover:border-chalk">
               {copied ? st.copied : st.copy}
             </button>
           </div>
         )}
 
-        <label className="mt-6 block cursor-pointer rounded-chip border-2 border-dashed border-line p-4 text-center hover:border-court">
+        <label className="mt-6 block cursor-pointer rounded-2xl border-2 border-dashed border-edge p-4 text-center hover:border-lime">
           <input
             type="file"
             accept="image/*,.heic,.heif"
@@ -319,27 +319,27 @@ function PayDeposit({
           {preview ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={preview} alt="" className="mx-auto max-h-64 rounded-chip object-contain" />
-              <span className="mt-3 block text-sm font-medium text-court">{st.change}</span>
+              <img src={preview} alt="" className="mx-auto max-h-64 rounded-xl object-contain" />
+              <span className="mt-3 block text-sm font-semibold text-lime">{st.change}</span>
             </>
           ) : (
-            <span className="block py-6 font-medium text-court">{st.upload}</span>
+            <span className="block py-6 font-semibold text-lime">{st.upload}</span>
           )}
         </label>
 
-        {error && <p className="mt-4 rounded-chip bg-bad-soft px-4 py-3 text-bad">{error}</p>}
+        {error && <p className="mt-4 rounded-xl bg-alert-bg px-4 py-3 text-alert">{error}</p>}
 
         <button
           type="button"
           onClick={send}
           disabled={!file || sending || left === 0}
-          className="mt-5 w-full rounded-chip bg-ball px-6 py-4 text-base font-semibold text-ink hover:bg-ball-deep disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-5 w-full rounded-full bg-lime px-6 py-4 text-base font-bold text-night hover:bg-lime-hi disabled:cursor-not-allowed disabled:bg-raised disabled:text-dim"
         >
           {sending ? st.uploading : st.confirm}
         </button>
       </section>
 
-      <p className="text-sm text-muted">{st.keepLink}</p>
+      <p className="text-sm text-dim">{st.keepLink}</p>
     </div>
   );
 }

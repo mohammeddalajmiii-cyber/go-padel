@@ -19,6 +19,20 @@
   --color-bad: #b42318;
   --color-bad-soft: #fde8e6;
 
+  /* Public site (dark): black, graphite and padel-ball lime. The front desk keeps the colors above. */
+  --color-night: #0a0a0a;
+  --color-surface: #161616;
+  --color-raised: #222222;
+  --color-edge: #333333;
+  --color-chalk: #f5f5f5;
+  --color-dim: #a3a3a3;
+  --color-lime: #c8f031;
+  --color-lime-hi: #e2ff7a;
+  --color-alert: #ff8f85;
+  --color-alert-bg: #3b1714;
+  --color-caution: #ffc670;
+  --color-caution-bg: #3a2a0d;
+
   --font-sans: "Readex Pro", system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
 
   --radius-chip: 10px;
@@ -63,6 +77,70 @@ body {
 }
 .gp-pulse {
   animation: gp-pulse 1.6s ease-in-out infinite;
+}
+
+/* ---------- Public site look ---------- */
+.gp-site {
+  background: var(--color-night);
+  color: var(--color-chalk);
+  color-scheme: dark;
+  font-family: "Inter", "Cairo", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+html[lang="ar"] .gp-site {
+  font-family: "Cairo", "Inter", system-ui, -apple-system, Tahoma, sans-serif;
+}
+.gp-site :focus-visible {
+  outline-color: var(--color-lime);
+}
+
+/* Big sporty headlines: Archivo, expanded italic. Arabic uses Cairo Black. */
+.gp-display {
+  font-family: "Archivo", "Cairo", system-ui, sans-serif;
+  font-weight: 900;
+  font-style: italic;
+  font-stretch: 112%;
+  text-transform: uppercase;
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+}
+html[lang="ar"] .gp-display {
+  font-family: "Cairo", system-ui, sans-serif;
+  font-style: normal;
+  font-stretch: normal;
+  text-transform: none;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+/* Prices and numbers */
+.gp-figure {
+  font-family: "Archivo", "Cairo", system-ui, sans-serif;
+  font-weight: 800;
+  font-stretch: 108%;
+}
+
+/* Home hero: the court photo, darkened where the text sits */
+.gp-hero {
+  background:
+    linear-gradient(180deg, rgba(10, 10, 10, 0.82) 0%, rgba(10, 10, 10, 0.55) 40%, rgba(10, 10, 10, 0.85) 80%, #0a0a0a 100%),
+    url("/court-blue.jpg") 34% center / cover no-repeat;
+}
+@media (min-width: 768px) {
+  .gp-hero {
+    background:
+      linear-gradient(180deg, rgba(10, 10, 10, 0) 72%, #0a0a0a 100%),
+      linear-gradient(90deg, rgba(10, 10, 10, 0.94) 0%, rgba(10, 10, 10, 0.72) 42%, rgba(10, 10, 10, 0.12) 100%),
+      url("/court-blue.jpg") center 62% / cover no-repeat;
+  }
+  html[dir="rtl"] .gp-hero {
+    background:
+      linear-gradient(180deg, rgba(10, 10, 10, 0) 72%, #0a0a0a 100%),
+      linear-gradient(270deg, rgba(10, 10, 10, 0.94) 0%, rgba(10, 10, 10, 0.72) 42%, rgba(10, 10, 10, 0.12) 100%),
+      url("/court-blue.jpg") center 62% / cover no-repeat;
+  }
+}
+.gp-photo {
+  background: url("/court-blue.jpg") center 70% / cover no-repeat;
 }
 
 /* Hide scrollbars on the day picker row but keep it scrollable */

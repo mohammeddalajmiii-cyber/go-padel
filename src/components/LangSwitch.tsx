@@ -12,7 +12,7 @@ export function LangSwitch({ lang, label }: { lang: "ar" | "en"; label: string }
     <Link
       href={href}
       lang={other}
-      className="rounded-chip px-3 py-2 text-sm font-medium text-court-line/90 hover:bg-white/10"
+      className="inline-flex min-h-11 items-center rounded-full border border-white/15 px-4 text-sm font-semibold text-chalk hover:border-chalk"
     >
       {label}
     </Link>

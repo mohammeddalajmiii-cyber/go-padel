@@ -115,10 +115,11 @@ export function BookingFlow(props: {
     i === 0 ? b.today : i === 1 ? b.tomorrow : formatDate(day, lang, { weekday: "short", day: "numeric", month: undefined });
 
   return (
-    <div className="mt-8 space-y-10">
+    <div className="mt-10 grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="min-w-0 space-y-10">
       {/* Day */}
       <section>
-        <h2 className="text-sm font-medium text-muted">{b.day}</h2>
+        <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-dim rtl:text-sm rtl:tracking-normal">{b.day}</h2>
         <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1">
           {dates.map((day, i) => {
             const on = day === date;
@@ -128,12 +129,12 @@ export function BookingFlow(props: {
                 type="button"
                 onClick={() => setDate(day)}
                 aria-pressed={on}
-                className={`shrink-0 rounded-chip border px-4 py-2.5 text-start text-sm ${
-                  on ? "border-court bg-court text-court-line" : "border-line bg-white hover:border-court"
+                className={`min-w-[5.5rem] shrink-0 rounded-2xl border px-4 py-3 text-start text-sm ${
+                  on ? "border-lime bg-lime text-night" : "border-edge hover:border-chalk"
                 }`}
               >
                 <span className="block font-semibold">{dayLabel(day, i)}</span>
-                <span className={`block text-xs ${on ? "text-court-line/75" : "text-muted"}`}>
+                <span className={`block text-xs ${on ? "text-night/70" : "text-dim"}`}>
                   {formatDate(day, lang, { weekday: undefined, day: "numeric", month: "short" })}
                 </span>
               </button>
@@ -144,7 +145,7 @@ export function BookingFlow(props: {
 
       {/* Length */}
       <section>
-        <h2 className="text-sm font-medium text-muted">{b.length}</h2>
+        <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-dim rtl:text-sm rtl:tracking-normal">{b.length}</h2>
         <div className="mt-3 grid max-w-md grid-cols-2 gap-2" role="radiogroup" aria-label={b.length}>
           {([30, 60] as Duration[]).map((dur) => {
             const on = dur === duration;
@@ -155,12 +156,12 @@ export function BookingFlow(props: {
                 role="radio"
                 aria-checked={on}
                 onClick={() => setDuration(dur)}
-                className={`rounded-chip border px-4 py-3 text-start ${
-                  on ? "border-court bg-court text-court-line" : "border-line bg-white hover:border-court"
+                className={`rounded-2xl border px-4 py-3.5 text-start ${
+                  on ? "border-lime bg-lime text-night" : "border-edge hover:border-chalk"
                 }`}
               >
                 <span className="block font-semibold">{dur === 30 ? d.home.min30 : d.home.min60}</span>
-                <span className={`block text-sm ${on ? "text-court-line/75" : "text-muted"}`}>
+                <span className={`block text-sm ${on ? "text-night/70" : "text-dim"}`}>
                   {num(prices[dur], lang)} {d.home.egp}
                 </span>
               </button>
@@ -171,15 +172,15 @@ export function BookingFlow(props: {
 
       {/* Start time */}
       <section>
-        <h2 className="text-sm font-medium text-muted">{b.time}</h2>
+        <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-dim rtl:text-sm rtl:tracking-normal">{b.time}</h2>
         {loadError ? (
-          <p className="mt-3 text-bad">{b.errors.generic}</p>
+          <p className="mt-3 text-alert">{b.errors.generic}</p>
         ) : !slots ? (
-          <p className="mt-3 text-muted">{b.loading}</p>
+          <p className="mt-3 text-dim">{b.loading}</p>
         ) : !anyFree ? (
-          <p className="mt-3 rounded-chip bg-glass px-4 py-3">{b.noTimes}</p>
+          <p className="mt-3 rounded-2xl bg-raised px-4 py-3">{b.noTimes}</p>
         ) : (
-          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5">
             {visible.map((s) => {
               const ok = canStart(s.start, duration);
               const on = start === s.start;
@@ -190,12 +191,12 @@ export function BookingFlow(props: {
                   disabled={!ok}
                   aria-pressed={on}
                   onClick={() => setStart(s.start)}
-                  className={`rounded-chip border px-2 py-3 text-sm font-medium ${
+                  className={`min-h-12 rounded-xl border px-2 py-3 text-sm font-semibold ${
                     on
-                      ? "border-ink bg-ball text-ink"
+                      ? "border-lime bg-lime text-night"
                       : ok
-                        ? "border-line bg-white hover:border-court"
-                        : "cursor-not-allowed border-transparent bg-glass/60 text-muted/60 line-through"
+                        ? "border-edge hover:border-chalk"
+                        : "cursor-not-allowed border-transparent bg-raised text-dim/60 line-through"
                   }`}
                 >
                   {formatTime(s.start, lang)}
@@ -207,15 +208,17 @@ export function BookingFlow(props: {
         )}
       </section>
 
+      </div>
+
       {/* Details */}
-      <form onSubmit={submit} noValidate className="rounded-panel border border-line bg-white p-5 sm:p-6">
-        <h2 className="text-xl font-semibold">{b.details}</h2>
-        <p className="mt-2 text-muted">
+      <form onSubmit={submit} noValidate className="rounded-3xl border border-edge bg-surface p-5 sm:p-7">
+        <h2 className="text-xl font-bold">{b.details}</h2>
+        <p className="mt-2 text-dim">
           {start === null ? (
             b.pickTime
           ) : (
             <>
-              <span className="font-medium text-ink">{formatDate(date, lang)}</span>,{" "}
+              <span className="font-semibold text-chalk">{formatDate(date, lang)}</span>,{" "}
               {fill(b.selected, { start: formatTime(start, lang), end: formatTime(start + duration, lang) })}
               {" · "}
               {num(prices[duration], lang)} {d.home.egp} ({d.home.deposit}: {num(deposits[duration], lang)})
@@ -223,7 +226,7 @@ export function BookingFlow(props: {
           )}
         </p>
 
-        <div className="mt-6 grid gap-5 sm:grid-cols-2">
+        <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
           <label className="block">
             <span className="text-sm font-medium">{b.name}</span>
             <input
@@ -231,9 +234,9 @@ export function BookingFlow(props: {
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
               aria-invalid={!!errors.name}
-              className="mt-1.5 w-full rounded-chip border border-line bg-paper px-3.5 py-3 outline-none focus:border-court"
+              className="mt-1.5 w-full rounded-xl border border-edge bg-night px-3.5 py-3 text-chalk placeholder:text-dim/60 outline-none focus:border-lime"
             />
-            {errors.name && <span className="mt-1 block text-sm text-bad">{errors.name}</span>}
+            {errors.name && <span className="mt-1 block text-sm text-alert">{errors.name}</span>}
           </label>
           <label className="block">
             <span className="text-sm font-medium">{b.phone}</span>
@@ -246,9 +249,9 @@ export function BookingFlow(props: {
               dir="ltr"
               placeholder="010 1234 5678"
               aria-invalid={!!errors.phone}
-              className="mt-1.5 w-full rounded-chip border border-line bg-paper px-3.5 py-3 text-start outline-none focus:border-court rtl:text-end"
+              className="mt-1.5 w-full rounded-xl border border-edge bg-night px-3.5 py-3 text-chalk placeholder:text-dim/60 text-start outline-none focus:border-lime rtl:text-end"
             />
-            <span className={`mt-1 block text-sm ${errors.phone ? "text-bad" : "text-muted"}`}>
+            <span className={`mt-1 block text-sm ${errors.phone ? "text-alert" : "text-dim"}`}>
               {errors.phone ?? b.phoneHint}
             </span>
           </label>
@@ -259,18 +262,18 @@ export function BookingFlow(props: {
             type="checkbox"
             checked={agree}
             onChange={(e) => setAgree(e.target.checked)}
-            className="mt-1 size-5 shrink-0 accent-court"
+            className="mt-1 size-5 shrink-0 accent-lime"
           />
           <span className="leading-relaxed">{b.agree}</span>
         </label>
-        {errors.agree && <p className="mt-1 text-sm text-bad">{errors.agree}</p>}
+        {errors.agree && <p className="mt-1 text-sm text-alert">{errors.agree}</p>}
 
-        {errors.form && <p className="mt-5 rounded-chip bg-bad-soft px-4 py-3 text-bad">{errors.form}</p>}
+        {errors.form && <p className="mt-5 rounded-xl bg-alert-bg px-4 py-3 text-alert">{errors.form}</p>}
 
         <button
           type="submit"
           disabled={start === null || sending}
-          className="mt-6 w-full rounded-chip bg-ball px-6 py-4 text-base font-semibold text-ink hover:bg-ball-deep disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          className="mt-6 w-full rounded-full bg-lime px-6 py-4 text-base font-bold text-night hover:bg-lime-hi disabled:cursor-not-allowed disabled:bg-raised disabled:text-dim"
         >
           {sending ? b.holding : start === null ? b.pickTime : b.continue}
         </button>

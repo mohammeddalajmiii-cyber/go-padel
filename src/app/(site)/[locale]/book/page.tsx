@@ -31,8 +31,8 @@ export default async function BookPage({
   const start = typeof sp.start === "string" && /^\d+$/.test(sp.start) ? Number(sp.start) : null;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pt-8">
-      <h1 className="text-3xl font-semibold tracking-tight">{t(locale).book.title}</h1>
+    <div className="mx-auto max-w-6xl px-4 pt-10 md:px-8 md:pt-14">
+      <h1 className="gp-display text-5xl md:text-6xl">{t(locale).book.title}</h1>
       <BookingFlow
         lang={locale}
         initialDate={date}

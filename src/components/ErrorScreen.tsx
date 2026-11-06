@@ -34,7 +34,7 @@ export function ErrorScreen({ lang, reset }: { lang: "ar" | "en"; reset: () => v
           </p>
         </div>
       ) : (
-        <div className="rounded-panel border border-line bg-white p-6">
+        <div className="rounded-panel border border-line bg-white p-6 text-ink">
           <h1 className="text-2xl font-semibold">{ar ? "الصفحة مفتحتش" : "This page didn't load"}</h1>
           <p className="mt-2 text-muted">
             {problems === null
