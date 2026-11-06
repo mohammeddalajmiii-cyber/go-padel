@@ -22,13 +22,13 @@ const en = {
     min30: "30 minutes",
     min60: "60 minutes",
     longerTitle: "Longer games",
-    longerText: "Book up to 4 hours in one go.",
+    longerText: "Book up to 8 hours in one go, as long as the court is free.",
     deposit: "Deposit to confirm",
     egp: "EGP",
     hours: "Open every day from {open} to {close}",
     howTitle: "How booking works",
     steps: [
-      { t: "Choose a time", d: "Pick a day, how long you want to play (30 minutes up to 4 hours), and a free start time." },
+      { t: "Choose a time", d: "Pick a day, how long you want to play (30 minutes up to 8 hours), and a free start time." },
       { t: "Pay the deposit", d: "Send the deposit with InstaPay and upload the screenshot within {hold} minutes." },
       { t: "Get confirmed", d: "The front desk checks your payment and confirms. You'll see it on your booking page and on WhatsApp." },
       { t: "Play", d: "Pay the rest at the counter in cash or by InstaPay." },
@@ -142,13 +142,13 @@ const ar: Dict = {
     min30: "٣٠ دقيقة",
     min60: "٦٠ دقيقة",
     longerTitle: "وقت أطول",
-    longerText: "احجز لحد ٤ ساعات مرة واحدة.",
+    longerText: "احجز لحد ٨ ساعات مرة واحدة، طالما الملعب فاضي.",
     deposit: "العربون للتأكيد",
     egp: "ج.م",
     hours: "مفتوح كل يوم من {open} إلى {close}",
     howTitle: "إزاي تحجز",
     steps: [
-      { t: "اختار الوقت", d: "اختار اليوم، والمدة اللي عايز تلعبها (من ٣٠ دقيقة لحد ٤ ساعات)، ووقت بداية متاح." },
+      { t: "اختار الوقت", d: "اختار اليوم، والمدة اللي عايز تلعبها (من ٣٠ دقيقة لحد ٨ ساعات)، ووقت بداية متاح." },
       { t: "ادفع العربون", d: "ابعت العربون بإنستاباي وارفع صورة التحويل خلال {hold} دقيقة." },
       { t: "استنى التأكيد", d: "الاستقبال بيراجع الدفع ويأكد حجزك. هتلاقي التأكيد في صفحة الحجز وعلى واتساب." },
       { t: "العب", d: "ادفع الباقي في الكاونتر كاش أو بإنستاباي." },
@@ -258,11 +258,10 @@ export function num(n: number, lang: Lang): string {
 /** A booking length in words: "1½ hours" / "ساعة ونص". */
 export function durationLabel(minutes: number, lang: Lang): string {
   if (lang === "ar") {
-    const ar: Record<number, string> = {
-      30: "٣٠ دقيقة", 60: "ساعة", 90: "ساعة ونص", 120: "ساعتين", 150: "ساعتين ونص",
-      180: "٣ ساعات", 210: "٣ ساعات ونص", 240: "٤ ساعات",
-    };
-    return ar[minutes] ?? `${num(minutes, lang)} دقيقة`;
+    if (minutes < 60) return `${num(minutes, lang)} دقيقة`;
+    const h = Math.floor(minutes / 60);
+    const hours = h === 1 ? "ساعة" : h === 2 ? "ساعتين" : `${num(h, lang)} ساعات`;
+    return minutes % 60 === 30 ? `${hours} ونص` : hours;
   }
   if (minutes < 60) return `${minutes} min`;
   const h = Math.floor(minutes / 60);

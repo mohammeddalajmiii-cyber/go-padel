@@ -138,7 +138,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             <div className="flex flex-col gap-4 rounded-3xl border border-edge bg-surface p-7">
               <span className="text-sm font-bold uppercase tracking-[0.14em] text-dim rtl:tracking-normal">{h.longerTitle}</span>
               <dl className="divide-y divide-edge">
-                {[90, 120, 180, 240].map((m) => (
+                {[90, 120, 240, 480].map((m) => (
                   <div key={m} className="flex items-baseline justify-between gap-4 py-2">
                     <dt className="font-semibold">{durationLabel(m, lang)}</dt>
                     <dd className="gp-figure text-xl">

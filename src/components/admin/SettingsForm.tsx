@@ -96,7 +96,7 @@ export function SettingsForm() {
           {num("deposit_60", "Deposit for 60 minutes")}
         </div>
         <p className="mt-4 text-sm text-muted">
-          Longer bookings (1½, 2, 3 and 4 hours) are priced from these: each hour at the 60-minute price and deposit, plus
+          Longer bookings (up to 8 hours) are priced from these: each hour at the 60-minute price and deposit, plus
           the 30-minute price and deposit for a half hour. For example 1½ hours = 60-minute price + 30-minute price.
         </p>
       </section>

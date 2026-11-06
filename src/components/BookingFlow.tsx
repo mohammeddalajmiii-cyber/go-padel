@@ -80,8 +80,12 @@ export function BookingFlow(props: {
   const visible = (slots ?? []).filter((s) => !s.past && fitsHours(hours, s.start, duration));
   const anyFree = visible.some((s) => canStart(s.start, duration));
 
-  // − / + : half an hour at a time, 30 minutes to 4 hours. If the longer game no longer
+  // − / + : half an hour at a time, 30 minutes to 8 hours. If the longer game no longer
   // fits at the chosen time, the time is cleared so they pick again.
+  // With a time picked, + stops when the next half hour is booked or past closing.
+  const canGrow =
+    duration < MAX_DURATION && (start === null || !slots || canStart(start, duration + DURATION_STEP));
+
   function changeLength(delta: number) {
     const next = Math.min(MAX_DURATION, Math.max(MIN_DURATION, duration + delta));
     setDuration(next);
@@ -178,7 +182,7 @@ export function BookingFlow(props: {
           <button
             type="button"
             onClick={() => changeLength(DURATION_STEP)}
-            disabled={duration >= MAX_DURATION}
+            disabled={!canGrow}
             aria-label={b.longer}
             className="grid size-14 shrink-0 place-items-center rounded-xl bg-lime text-night hover:bg-lime-hi disabled:cursor-not-allowed disabled:bg-raised disabled:text-dim disabled:opacity-35"
           >

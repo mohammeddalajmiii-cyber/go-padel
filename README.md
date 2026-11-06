@@ -2,7 +2,7 @@
 
 Booking site and front desk system for the padel court at Avenue Mall, Rehab City.
 
-- **Booking site** (Arabic at `/ar`, English at `/en`): players pick a day, a length (30 minutes up to 4 hours) and a start time, enter their name and mobile, pay the deposit by InstaPay, upload the screenshot, and see their booking confirmed live.
+- **Booking site** (Arabic at `/ar`, English at `/en`): players pick a day, a length (30 minutes up to 8 hours) and a start time, enter their name and mobile, pay the deposit by InstaPay, upload the screenshot, and see their booking confirmed live.
 - **Front desk** (`/admin`): the day's schedule from opening to closing, payments waiting to be checked (with the screenshot), confirm or reject, one-tap WhatsApp confirmation, collect the rest in cash or InstaPay, arrived / no-show, walk-ins, blocked time, reports and settings.
 
 Built with Next.js, Tailwind CSS and PostgreSQL (Neon). Hosted on Vercel.
@@ -16,7 +16,7 @@ Built with Next.js, Tailwind CSS and PostgreSQL (Neon). Hosted on Vercel.
 | Price | 200 EGP | 400 EGP |
 | Deposit by InstaPay | 50 EGP | 100 EGP |
 
-- Players choose how long with − / + buttons: it starts at 1 hour and moves by half an hour, from 30 minutes up to 4 hours. Longer bookings are priced from the table: each hour at the 60-minute price, plus the 30-minute price for a half hour (1½ hours = 600 EGP, deposit 150).
+- Players choose how long with − / + buttons: it starts at 1 hour and moves by half an hour, from 30 minutes up to 8 hours, as long as the court is free for the whole time. Longer bookings are priced from the table: each hour at the 60-minute price, plus the 30-minute price for a half hour (1½ hours = 600 EGP, deposit 150).
 - Open 3:00 PM to 1:00 AM. Bookings start on the hour or half hour.
 - A slot is held for 15 minutes while the player pays. Uploading the screenshot stops the timer.
 - No cancellations; deposits are non-refundable.

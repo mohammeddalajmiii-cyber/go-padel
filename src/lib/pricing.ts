@@ -2,10 +2,10 @@
 
 /** Shortest and longest booking, and the step the − / + buttons move by (minutes). */
 export const MIN_DURATION = 30;
-export const MAX_DURATION = 240;
+export const MAX_DURATION = 480;
 export const DURATION_STEP = 30;
 
-/** Every length a booking can be: 30 min, 1 h, 1½ h … 4 h. */
+/** Every length a booking can be: 30 min, 1 h, 1½ h … 8 h. */
 export const DURATIONS: number[] = Array.from(
   { length: (MAX_DURATION - MIN_DURATION) / DURATION_STEP + 1 },
   (_, i) => MIN_DURATION + i * DURATION_STEP,
